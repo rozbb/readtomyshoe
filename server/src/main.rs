@@ -1,25 +1,21 @@
-mod counter;
 mod list_articles;
 
 use std::future::ready;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::str::FromStr;
 
-use axum::body::Body;
-use axum::extract::ConnectInfo;
-use axum::http::{HeaderValue, Request, StatusCode};
+use axum::http::StatusCode;
 use axum::routing::{get, get_service};
 use axum::Router;
-use axum_extra::routing::SpaRouter;
 use clap::Parser;
 use tower::ServiceBuilder;
-use tower_http::{
-    services::{ServeDir, ServeFile},
-    trace::TraceLayer,
-};
+use tower_http::{services::ServeDir, trace::TraceLayer};
 
 #[derive(Parser, Debug)]
-#[clap(name = "{{project-name}}-server", about = "A Rust web server.")]
+#[clap(
+    name = "readtomyshoe-server",
+    about = "The primary backend for Readtomyshoe"
+)]
 struct Opt {
     /// The log level
     #[clap(short = 'l', long = "log", default_value = "debug")]
@@ -65,7 +61,6 @@ async fn main() {
         .nest("/api/audio-blobs", audio_blob_service);
     //.merge(SpaRouter::new("/assets", &opt.static_dir).index_file(&opt.index_file))
 
-    let app = counter::setup(app);
     let app = list_articles::setup(app, &opt.audio_blob_dir);
 
     let tracing_layer = TraceLayer::new_for_http();

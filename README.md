@@ -24,4 +24,6 @@ Run the pre-compiled version with `./scripts/prod.sh`.
 
 The app will start at https://localhost:8080 by default.
 
-Scripts are due to [Robert Krahn](https://github.com/rksm/axum-yew-setup). Thanks!
+## Thanks
+
+A lot of the ideas and code in this crate started with Robert Krahn's [fantastic template](https://robert.kra.hn/posts/2022-04-03_rust-web-wasm/#making-the-file-server-support-a-spa-app). Thanks

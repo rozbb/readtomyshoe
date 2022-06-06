@@ -1,13 +1,10 @@
-use std::ffi::OsString;
-use std::fs::{self, DirEntry};
+use std::fs;
 
 use common::ArticleList;
 
-use axum::{
-    extract::Extension, http::StatusCode, response::IntoResponse, routing::get, BoxError, Json,
-    Router,
-};
+use axum::{extract::Extension, http::StatusCode, routing::get, Json, Router};
 
+// Sets the /api/list-articles route
 pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
     router.nest(
         "/api",
@@ -17,9 +14,11 @@ pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
     )
 }
 
+/// Lists the articles in the audio blob directory
 async fn list_articles(
     Extension(audio_blob_dir): Extension<String>,
 ) -> Result<Json<ArticleList>, StatusCode> {
+    // Try to open the directory
     let dir: fs::ReadDir = match fs::read_dir(audio_blob_dir) {
         Ok(d) => d,
         Err(e) => {
@@ -28,6 +27,7 @@ async fn list_articles(
         }
     };
 
+    // List the directory
     let article_list = dir
         .map(|d| d.map(|r| r.file_name().into_string().unwrap()))
         .collect::<Result<Vec<String>, std::io::Error>>()

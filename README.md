@@ -17,8 +17,7 @@ We use Google Cloud's text to speech engine. Here's how to get an API key:
     * Click "Edit API key"
     * Under "API restrictions" click "Restrict key"
     * Select "Cloud Text-to-Speech API"
-* Now copy your API key to the clipboard
-* Whenever you run the server, you need to set the environment variable `GCP_API_KEY` to your API key
+* Now copy your API key to the clipboard, create a new file `server/gcp_api.key`, and paste it there
 
 ### Other setup
 

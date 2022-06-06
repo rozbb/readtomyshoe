@@ -3,3 +3,4 @@ target-trunk/
 /dist/
 .DS_Store
 *.mp3
+gcp_api.key

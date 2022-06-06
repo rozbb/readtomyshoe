@@ -1,4 +1,6 @@
+mod add_article;
 mod list_articles;
+mod tts;
 
 use std::future::ready;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
@@ -46,6 +48,9 @@ struct Opt {
 async fn main() {
     let opt = Opt::parse();
 
+    // Check up front that the Google cloud API key was set
+    tts::get_api_key().unwrap();
+
     // Setup logging & RUST_LOG from args
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", format!("{},hyper=info,mio=info", opt.log_level))
@@ -53,6 +58,7 @@ async fn main() {
 
     tracing_subscriber::fmt::init();
 
+    // Make a service that just returns files from /audio_blobs
     let audio_blob_service = get_service(ServeDir::new("audio_blobs"))
         .handle_error(|_| ready(StatusCode::INTERNAL_SERVER_ERROR));
 
@@ -61,18 +67,20 @@ async fn main() {
         .nest("/api/audio-blobs", audio_blob_service);
     //.merge(SpaRouter::new("/assets", &opt.static_dir).index_file(&opt.index_file))
 
+    // Set up /api/list-articles
     let app = list_articles::setup(app, &opt.audio_blob_dir);
+    let app = add_article::setup(app, &opt.audio_blob_dir);
 
+    // Tracing for the entire app
     let tracing_layer = TraceLayer::new_for_http();
     let app = app.layer(ServiceBuilder::new().layer(tracing_layer));
 
+    // Set up the server
     let sock_addr = SocketAddr::from((
         IpAddr::from_str(opt.addr.as_str()).unwrap_or(IpAddr::V6(Ipv6Addr::LOCALHOST)),
         opt.port,
     ));
-
-    tracing::info!("listening on http://{}", sock_addr);
-
+    tracing::info!("Listening on http://{}", sock_addr);
     axum::Server::bind(&sock_addr)
         .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .await

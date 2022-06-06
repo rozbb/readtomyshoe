@@ -6,6 +6,22 @@ This is a full stack Rust web app using [axum](https://github.com/tokio-rs/axum)
 
 ## Installation
 
+### Google Cloud
+
+We use Google Cloud's text to speech engine. Here's how to get an API key:
+
+* Make a [Google Cloud](https://cloud.google.com) account,
+* Go to the [credentials page](https://console.cloud.google.com/apis/credentials)
+* Click "Create Credentials" at the top of the page and select "API Key"
+* You can copy the API key right now or click "Edit API key" and restrict its capabilities. To restrict:
+    * Click "Edit API key"
+    * Under "API restrictions" click "Restrict key"
+    * Select "Cloud Text-to-Speech API"
+* Now copy your API key to the clipboard
+* Whenever you run the server, you need to set the environment variable `GCP_API_KEY` to your API key
+
+### Other setup
+
 This requires a custom version of everything related wasm-bindgen because the `MediaSession` API has not yet been merged into `web_sys`. Do the following:
 
 * `cargo install --locked trunk wasm-bindgen-cli`

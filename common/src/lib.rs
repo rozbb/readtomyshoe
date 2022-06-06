@@ -10,3 +10,9 @@ impl ArticleList {
         ArticleList { titles }
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ArticleSubmission {
+    pub title: String,
+    pub body: String,
+}

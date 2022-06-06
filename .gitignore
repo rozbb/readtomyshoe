@@ -1,0 +1,5 @@
+target/
+target-trunk/
+/dist/
+.DS_Store
+*.mp3

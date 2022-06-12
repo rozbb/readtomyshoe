@@ -9,6 +9,7 @@ use std::str::FromStr;
 use axum::http::StatusCode;
 use axum::routing::{get, get_service};
 use axum::Router;
+use axum_extra::routing::SpaRouter;
 use clap::Parser;
 use tower::ServiceBuilder;
 use tower_http::{services::ServeDir, trace::TraceLayer};
@@ -64,8 +65,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
-        .nest("/api/audio-blobs", audio_blob_service);
-    //.merge(SpaRouter::new("/assets", &opt.static_dir).index_file(&opt.index_file))
+        .nest("/api/audio-blobs", audio_blob_service)
+        .merge(SpaRouter::new("/assets", &opt.static_dir).index_file(&opt.index_file));
 
     // Set up /api/list-articles
     let app = list_articles::setup(app, &opt.audio_blob_dir);

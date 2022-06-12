@@ -1,6 +1,21 @@
-use crate::{library_view::Library, player_view::Player, queue_view::Queue, WeakComponentLink};
+use crate::{
+    add_view::Add, library_view::Library, main_view::Main, player_view::Player, queue_view::Queue,
+    WeakComponentLink,
+};
 
 use yew::prelude::*;
+use yew_router::prelude::*;
+
+#[derive(Clone, Routable, PartialEq)]
+enum Route {
+    #[at("/")]
+    Home,
+    #[at("/add")]
+    Add,
+    #[not_found]
+    #[at("/404")]
+    NotFound,
+}
 
 #[derive(Default)]
 pub struct App {
@@ -21,19 +36,28 @@ impl Component for App {
     }
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
-        let queue_link = &self.queue_link;
-        let player_link = &self.player_link;
+        let queue_link_copy = self.queue_link.clone();
+        let player_link_copy = self.player_link.clone();
+
+        let switch = move |routes: &Route| {
+            let queue_link = queue_link_copy.clone();
+            let player_link = player_link_copy.clone();
+
+            match routes {
+                Route::Home => html! {
+                    <Main {queue_link} {player_link} />
+                },
+                Route::Add => html! {
+                    <Add />
+                },
+                Route::NotFound => html! { <h1>{ "404" }</h1> },
+            }
+        };
 
         html! {
-            <div class="main">
-                <h1>{ "Main View" }</h1>
-                <h2>{ "Library" }</h2>
-                <Library {queue_link} />
-                <h2>{ "Queue" }</h2>
-                <Queue {queue_link} {player_link} />
-                <h2>{ "Player" }</h2>
-                <Player {player_link} />
-            </div>
+        <BrowserRouter>
+            <Switch<Route> render={Switch::render(switch)} />
+        </BrowserRouter>
         }
     }
 }

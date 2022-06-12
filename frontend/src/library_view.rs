@@ -7,15 +7,7 @@ use common::ArticleList;
 
 use anyhow::{bail, Error as AnyError};
 use gloo_net::http::Request;
-use wasm_bindgen_futures::spawn_local;
-use web_sys::MouseEvent;
-use yew::callback::Callback;
 use yew::{html::Scope, prelude::*};
-
-#[derive(PartialEq, Properties)]
-pub struct Props {
-    pub queue_link: WeakComponentLink<Queue>,
-}
 
 /// Fetches the list of articles
 async fn fetch_article_list() -> Result<ArticleList, AnyError> {
@@ -99,6 +91,11 @@ pub(crate) enum LibraryMsg {
     SetError(AnyError),
     FetchArticle(String),
     PassArticleToQueue(CachedArticleHandle),
+}
+
+#[derive(PartialEq, Properties)]
+pub struct Props {
+    pub queue_link: WeakComponentLink<Queue>,
 }
 
 impl Component for Library {

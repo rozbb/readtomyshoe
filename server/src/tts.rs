@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 use std::time::{self, UNIX_EPOCH};
 
-use anyhow::Error;
+use anyhow::{bail, Error};
 use bytes::Bytes;
 use reqwest::Error as ReqwestError;
 use serde::{Deserialize, Serialize};
@@ -60,6 +60,10 @@ impl TtsRequest {
 /// Translates text string of length at most MAX_CHARS_PER_REQUEST
 pub(crate) async fn tts(api_key: &str, req: &TtsRequest) -> Result<Bytes, Error> {
     let payload = req.into_json();
+
+    if req.text.len() > MAX_CHARS_PER_REQUEST {
+        bail!("TTS request is too long");
+    }
 
     let client = reqwest::Client::new();
     let url = reqwest::Url::parse_with_params(GCP_TTS_API, &[("key", api_key)])?;

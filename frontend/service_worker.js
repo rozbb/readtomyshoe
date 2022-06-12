@@ -6,8 +6,8 @@ const cacheName = "readtomyshow-v1";
 const appShellFiles = [
     "/",
     "/index.html",
-    "/frontend.js",
-    "/frontend_bg.wasm"
+    "/readtomyshoe-frontend.js",
+    "/readtomyshoe-frontend_bg.wasm"
 ];
 
 // Add to caches on installation

@@ -193,6 +193,55 @@ pub(crate) async fn table_put(table_name: &str, val: &JsValue) -> Result<String,
     }
 }
 
+/// Puts the value in the given table and returns the key to it
+pub(crate) async fn table_delete(table_name: &str, key: &str) -> Result<(), AnyError> {
+    // Get the articles object store
+    let table = get_db()
+        .await?
+        .transaction_with_str_and_mode(table_name, IdbTransactionMode::Readwrite)
+        .map_err(|e| wrap_jserror("couldn't start transaction", e))?
+        .object_store(table_name)
+        .map_err(|e| wrap_jserror("couldn't get object store from transaction", e))?;
+
+    tracing::info!("Got DB handle");
+
+    // Request a put() operation on the table
+    let req = table
+        .delete(&JsValue::from_str(key))
+        .map_err(|e| wrap_jserror("couldn't save value to table", e))?;
+
+    // Now handle the outcomes of the put. Make channels to indicate success or failure
+    let success_var = Arc::new(tokio::sync::Notify::new());
+    let success_var2 = success_var.clone();
+    let (error_tx, mut error_rx) = tokio::sync::mpsc::channel(1);
+
+    // Set callbacks for the above events. Error has to send the error message over a channel
+    let success_cb: Closure<dyn Fn(Event)> = Closure::new(move |_| success_var2.notify_one());
+    let error_cb: Closure<dyn Fn(Event)> = Closure::new(move |e| {
+        let error_tx2 = error_tx.clone();
+        spawn_local(async move {
+            // Send the error. We unwrap here. Something probably went very wrong if async channels
+            // stop working
+            error_tx2.send(e).await.unwrap();
+        })
+    });
+    req.set_onsuccess(Some(success_cb.as_ref().unchecked_ref()));
+    req.set_onerror(Some(error_cb.as_ref().unchecked_ref()));
+
+    // Wait for an event to trigger, and cancel the remaining branches
+    tokio::select! {
+        _ = success_var.notified() => {
+            tracing::info!("Successfully deleted {:?}", key);
+
+            // Get the key of the article we just pushed
+            Ok(())
+        },
+        e = error_rx.recv() => {
+            bail!("Error writing to {}: {:?}", table_name, e);
+        }
+    }
+}
+
 /// Gets the value in the given table at the given key
 pub(crate) async fn table_get(table_name: &str, key: &str) -> Result<JsValue, AnyError> {
     // Get the articles object store
@@ -353,6 +402,10 @@ pub(crate) async fn load_article(handle: &CachedArticleHandle) -> Result<CachedA
     let audio_blob = js_sys::Uint8Array::new(&array_buf).to_vec();
 
     Ok(CachedArticle { title, audio_blob })
+}
+
+pub(crate) async fn delete_article(handle: &CachedArticleHandle) -> Result<(), AnyError> {
+    table_delete(ARTICLES_TABLE, &handle.0).await
 }
 
 pub(crate) async fn load_handles() -> Result<Vec<CachedArticleHandle>, AnyError> {

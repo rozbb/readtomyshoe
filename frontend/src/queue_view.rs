@@ -22,6 +22,7 @@ pub struct Props {
 
 pub enum QueueMsg {
     Add(CachedArticle),
+    Delete(usize),
     AddHandle(CachedArticleHandle),
     LoadFrom(Vec<CachedArticleHandle>),
     Remove(usize),
@@ -58,6 +59,17 @@ impl Component for Queue {
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             QueueMsg::Add(article) => self.articles.push(article),
+            QueueMsg::Delete(idx) => {
+                // Remove the handle from the queue and delete it from the cache
+                let handle = self.article_handles.remove(idx);
+                spawn_local(async move {
+                    // Try deleting
+                    match caching::delete_article(&handle).await {
+                        Err(e) => tracing::error!("{:?}", e),
+                        _ => (),
+                    }
+                });
+            }
             QueueMsg::AddHandle(handle) => self.article_handles.push(handle),
             QueueMsg::LoadFrom(handles) => {
                 self.article_handles = handles;
@@ -92,16 +104,21 @@ impl Component for Queue {
     fn view(&self, ctx: &Context<Self>) -> Html {
         self.article_handles
             .iter()
-            .map(|handle| {
+            .enumerate()
+            .map(|(i, handle)| {
                 let player_link = ctx.props().player_link.borrow().clone().unwrap();
+                let queue_link = ctx.props().queue_link.borrow().clone().unwrap();
+
                 let handle_copy = handle.clone();
-                let callback = Callback::from(move |_| {
+                let play_callback = Callback::from(move |_| {
                     player_link.send_message(PlayerMsg::PlayHandle(handle_copy.clone()));
                 });
+                let remove_callback = queue_link.callback(move |_| QueueMsg::Delete(i));
                 html! {
                     <p>
+                        <button onclick={remove_callback}>{ "🗑" }</button>
                         {&handle.0}
-                        <button onclick={callback}>{ "▶️" }</button>
+                        <button onclick={play_callback}>{ "▶️" }</button>
                     </p>
                 }
             })

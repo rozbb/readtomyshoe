@@ -346,31 +346,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "frontend"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "common",
- "console_error_panic_hook",
- "gloo-net",
- "gloo-utils",
- "js-sys",
- "log",
- "serde",
- "serde-wasm-bindgen 0.4.3",
- "serde_bytes",
- "tokio",
- "tracing",
- "tracing-wasm",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "wasm-logger",
- "web-sys",
- "yew",
- "yew-router",
-]
-
-[[package]]
 name = "futures-channel"
 version = "0.3.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1023,6 +998,54 @@ dependencies = [
 ]
 
 [[package]]
+name = "readtomyshoe-frontend"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "common",
+ "console_error_panic_hook",
+ "gloo-net",
+ "gloo-utils",
+ "js-sys",
+ "log",
+ "serde",
+ "serde-wasm-bindgen 0.4.3",
+ "serde_bytes",
+ "tokio",
+ "tracing",
+ "tracing-wasm",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-logger",
+ "web-sys",
+ "yew",
+ "yew-router",
+]
+
+[[package]]
+name = "readtomyshoe-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "axum-extra",
+ "base64",
+ "bytes",
+ "clap",
+ "common",
+ "log",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1206,29 +1229,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "axum-extra",
- "base64",
- "bytes",
- "clap",
- "common",
- "log",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

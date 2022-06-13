@@ -1,14 +1,9 @@
-use crate::{
-    caching,
-    queue_view::{CachedArticle, CachedArticleHandle, Queue, QueueMsg},
-    WeakComponentLink,
-};
 use common::ArticleSubmission;
 
 use anyhow::{bail, Error as AnyError};
 use gloo_net::http::Request;
 use wasm_bindgen::JsValue;
-use yew::{html::Scope, prelude::*};
+use yew::prelude::*;
 
 const TITLE_FORM_ID: &str = "article-title-input";
 const BODY_FORM_ID: &str = "article-body-input";
@@ -46,10 +41,12 @@ fn get_elem_value(id: &str) -> String {
 #[derive(Default)]
 pub(crate) struct Add {
     err: Option<AnyError>,
+    progress: Vec<String>,
 }
 
 pub enum AddMsg {
-    SetError(Option<AnyError>),
+    SetError(AnyError),
+    AddProgress(String),
 }
 
 impl Component for Add {
@@ -59,10 +56,13 @@ impl Component for Add {
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             AddMsg::SetError(e) => {
-                self.err = e;
-                true
+                self.err = Some(e);
+            }
+            AddMsg::AddProgress(p) => {
+                self.progress.push(p);
             }
         }
+        true
     }
 
     fn create(_ctx: &Context<Self>) -> Self {
@@ -70,7 +70,8 @@ impl Component for Add {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let add_callback = ctx.link().callback_future(|_: MouseEvent| async move {
+        let link = ctx.link().clone();
+        let add_callback = Callback::from(move |_| {
             // Collect the title and body
             let title = get_elem_value(TITLE_FORM_ID);
             let body = get_elem_value(BODY_FORM_ID);
@@ -79,16 +80,25 @@ impl Component for Add {
                 gloo_utils::window()
                     .alert_with_message("Must fill out title and body")
                     .unwrap();
-                return AddMsg::SetError(None);
+                return;
             }
 
+            // Construct the submission and update the progress
             let submission = ArticleSubmission { title, body };
+            link.send_message(AddMsg::AddProgress("Converting to speech...".to_string()));
 
             tracing::debug!("Submitting {:?}", submission);
 
             // Make the submission
-            let res = add_article(&submission).await.err();
-            AddMsg::SetError(res)
+            link.send_future(async move {
+                if let Err(e) = add_article(&submission).await {
+                    // On error, send the error
+                    AddMsg::SetError(e)
+                } else {
+                    // On success, say so
+                    AddMsg::AddProgress("Success!".to_string())
+                }
+            });
         });
 
         let err_str = self
@@ -112,6 +122,11 @@ impl Component for Add {
                 </section>
                 <section>
                     <button onclick={add_callback}>{ "Submit" }</button>
+                </section>
+                <section id="progress">
+                    <p>
+                        { self.progress.join(" ") }
+                    </p>
                 </section>
                 <section id="errors">
                     <p style={ "color: red;" }>

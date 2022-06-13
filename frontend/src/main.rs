@@ -47,6 +47,6 @@ fn main() {
     console_error_panic_hook::set_once();
     tracing_wasm::set_as_global_default();
 
-    caching::register_service_worker();
+    //caching::register_service_worker();
     yew::start_app::<App>();
 }

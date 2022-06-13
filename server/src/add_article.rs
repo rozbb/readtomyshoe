@@ -61,13 +61,14 @@ async fn add_article(
 
         // TODO: Internationalize this to use the correct stop character for the given language
         // Include the title at the top of the article.
+        let text = format!("{title}. {body}");
         let req = TtsRequest {
-            text: format!("{title}. {body}"),
-            wavenet: false,
+            text,
+            use_wavenet: false,
         };
 
         // Make the TTS request
-        let bytes = match tts(&api_key, &req).await {
+        let bytes = match tts(&api_key, req).await {
             Ok(b) => b,
             Err(e) => {
                 tracing::error!("TTS failed: {:?}", e);

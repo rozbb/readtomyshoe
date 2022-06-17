@@ -57,4 +57,7 @@ COPY --from=builder /usr/local/cargo/bin/readtomyshoe-server /app/server/readtom
 # NOTE: This is a secret value!
 COPY ./server/gcp_api.key ./server/
 
+# Go to where the binary is
+WORKDIR /app/server
+
 # No CMD or ENTRYPOINT, see fly.toml with `cmd` override.

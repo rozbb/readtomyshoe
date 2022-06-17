@@ -3,7 +3,7 @@ use common::ArticleSubmission;
 
 use std::{fs::OpenOptions, io::Write, path::Path};
 
-use anyhow::{anyhow, Error};
+use anyhow::anyhow;
 use axum::{extract::Extension, response::IntoResponse, routing::post, Json, Router};
 
 struct AddArticleError(anyhow::Error);
@@ -16,11 +16,10 @@ impl From<anyhow::Error> for AddArticleError {
 
 impl axum::response::IntoResponse for AddArticleError {
     fn into_response(self) -> axum::response::Response {
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            self.0.to_string(),
-        )
-            .into_response()
+        // Log the error and return it
+        let err_str = self.0.to_string();
+        tracing::error!("{}", err_str);
+        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err_str).into_response()
     }
 }
 

@@ -19,6 +19,10 @@ We use Google Cloud's text to speech engine. Here's how to get an API key:
     * Select "Cloud Text-to-Speech API"
 * Now copy your API key to the clipboard, create a new file `server/gcp_api.key`, and paste it there
 
+### OpenSSL
+
+You need to have OpenSSL installed on your machine. For Ubuntu, just `sudo apt install libssl-dev`.
+
 ### Other setup
 
 This requires a custom version of everything related wasm-bindgen because the `MediaSession` API has not yet been merged into `web_sys`. Do the following:

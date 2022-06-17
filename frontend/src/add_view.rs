@@ -19,9 +19,10 @@ async fn add_article(submission: &ArticleSubmission) -> Result<(), AnyError> {
 
     if !resp.ok() {
         bail!(
-            "Error fetching article list {} ({})",
-            resp.status(),
-            resp.status_text()
+            "Error adding article \"{}\" ({}; {:?})",
+            submission.title,
+            resp.status_text(),
+            resp.text().await
         );
     }
 

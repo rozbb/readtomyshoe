@@ -23,7 +23,7 @@ We use Google Cloud's text to speech engine. Here's how to get an API key:
 
 This requires a custom version of everything related wasm-bindgen because the `MediaSession` API has not yet been merged into `web_sys`. Do the following:
 
-* `cargo install --locked trunk wasm-bindgen-cli`
+* `cargo install --locked trunk cargo-watch wasm-bindgen-cli`
 * Set the following in `~/.cargo/config`. This is because `web_sys` gates unstable features via cfg. I know this is very weird.
 ```
 [build]

@@ -1,19 +1,28 @@
 use crate::tts::{get_api_key, tts, TtsRequest};
 use common::ArticleSubmission;
 
-use std::{
-    ffi::OsString,
-    fs::{File, OpenOptions},
-    io::Write,
-    path::Path,
-};
+use std::{fs::OpenOptions, io::Write, path::Path};
 
-use anyhow::Error;
-use axum::{
-    body::StreamBody, extract::Extension, http::StatusCode, response::IntoResponse, routing::post,
-    Json, Router,
-};
-use tokio_stream::wrappers::ReceiverStream;
+use anyhow::{anyhow, Error};
+use axum::{extract::Extension, response::IntoResponse, routing::post, Json, Router};
+
+struct AddArticleError(anyhow::Error);
+
+impl From<anyhow::Error> for AddArticleError {
+    fn from(error: anyhow::Error) -> Self {
+        Self(error)
+    }
+}
+
+impl axum::response::IntoResponse for AddArticleError {
+    fn into_response(self) -> axum::response::Response {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            self.0.to_string(),
+        )
+            .into_response()
+    }
+}
 
 // Sets the /api/add-article route
 pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
@@ -29,65 +38,39 @@ pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
 async fn add_article(
     Json(ArticleSubmission { title, body }): Json<ArticleSubmission>,
     Extension(audio_blob_dir): Extension<String>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, AddArticleError> {
     // Open a new MP3 file. Fail if the file already exists
     let savepath = Path::new(&audio_blob_dir)
         .join(&title)
         .with_extension("mp3");
-    let mut savefile = match OpenOptions::new()
+    let mut savefile = OpenOptions::new()
         .write(true)
         .create(false)
         .create_new(true)
         .open(savepath)
-    {
-        Ok(f) => f,
-        Err(e) => {
-            let err_str = format!("Couldn't open savefile: {:?}", e);
-            tracing::error!("{}", err_str);
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, err_str));
-        }
+        .map_err(|e| anyhow!("Couldn't open savefile: {:?}", e))?;
+
+    // TODO: Delete the savefile if an error occurs
+
+    let api_key = get_api_key().map_err(|e| anyhow!("Failed to get Google API key: {:?}", e))?;
+
+    // TODO: Internationalize this to use the correct stop character for the given language
+    // Include the title at the top of the article.
+    let text = format!("{title}. {body}");
+    let req = TtsRequest {
+        text,
+        use_wavenet: false,
     };
 
-    let (resp_tx, resp_rx) = tokio::sync::mpsc::channel(10);
+    // Make the TTS request
+    let bytes = tts(&api_key, req)
+        .await
+        .map_err(|e| anyhow!("TTS failed: {:?}", e))?;
 
-    tokio::spawn(async move {
-        let api_key = match get_api_key() {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::error!("Failed to get Google API key: {:?}", e);
-                return;
-            }
-        };
+    // Save the file
+    savefile
+        .write_all(&bytes)
+        .map_err(|e| anyhow!("Save failed: {:?}", e))?;
 
-        // TODO: Internationalize this to use the correct stop character for the given language
-        // Include the title at the top of the article.
-        let text = format!("{title}. {body}");
-        let req = TtsRequest {
-            text,
-            use_wavenet: false,
-        };
-
-        // Make the TTS request
-        let bytes = match tts(&api_key, req).await {
-            Ok(b) => b,
-            Err(e) => {
-                tracing::error!("TTS failed: {:?}", e);
-                return;
-            }
-        };
-
-        // Save the file
-        if let Err(e) = savefile.write_all(&bytes) {
-            tracing::error!("Save failed: {:?}", e);
-            return;
-        }
-
-        let r: Result<String, String> = Ok(title);
-        if let Err(e) = resp_tx.send(r).await {
-            tracing::error!("Failed to send body: {:?}", e);
-            return;
-        }
-    });
-
-    Ok(StreamBody::new(ReceiverStream::from(resp_rx)))
+    Ok(title)
 }

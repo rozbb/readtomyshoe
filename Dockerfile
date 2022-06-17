@@ -21,14 +21,23 @@ RUN mkdir common/src && echo "fn main(){}" > common/src/main.rs
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/src/app/target \
     cargo build --release
+# Will install the tools needed to build the webapp
+RUN cargo install --locked trunk cargo-watch wasm-bindgen-cli
+RUN rustup target add wasm32-unknown-unknown
 
-# Copy the rest
+# Copy the rest.
 COPY . .
 # Build (install) the actual binaries
-RUN ./scripts/prodbuild.sh
+RUN RUSTFLAGS=--cfg=web_sys_unstable_apis ./scripts/prodbuild.sh
 
 # Runtime image
 FROM debian:bullseye-slim
+
+# Need certs for talking to Google Cloud
+RUN \
+  apt-get update && \
+  apt-get install -y ca-certificates && \
+  apt-get clean
 
 # Run as "app" user
 RUN useradd -ms /bin/bash app
@@ -36,7 +45,16 @@ RUN useradd -ms /bin/bash app
 USER app
 WORKDIR /app
 
-# Get compiled binaries from builder's cargo install directory
-COPY --from=builder /usr/local/cargo/bin/readtomyshoe-server /app/readtomyshoe-server
+# The binary and the blobs dir need to be in server/
+RUN mkdir server
+RUN mkdir server/audio_blobs
+
+# Get compiled binaries and assets from the builder's cargo install directory
+COPY --from=builder /usr/src/app/dist /app/dist
+COPY --from=builder /usr/local/cargo/bin/readtomyshoe-server /app/server/readtomyshoe-server
+
+# Copy the API key
+# NOTE: This is a secret value!
+COPY ./server/gcp_api.key ./server/
 
 # No CMD or ENTRYPOINT, see fly.toml with `cmd` override.

@@ -28,6 +28,7 @@ You need to have OpenSSL installed on your machine. For Ubuntu, just `sudo apt i
 This requires a custom version of everything related wasm-bindgen because the `MediaSession` API has not yet been merged into `web_sys`. Do the following:
 
 * `cargo install --locked trunk cargo-watch wasm-bindgen-cli`
+* `rustup target add wasm32-unknown-unknown`
 * Set the following in `~/.cargo/config`. This is because `web_sys` gates unstable features via cfg. I know this is very weird.
 ```
 [build]

@@ -22,8 +22,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/src/app/target \
     cargo build --release
 # Will install the tools needed to build the webapp
-RUN cargo install --locked trunk cargo-watch wasm-bindgen-cli
 RUN rustup target add wasm32-unknown-unknown
+RUN cargo install --locked trunk
 
 # Copy the rest.
 COPY . .

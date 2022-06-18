@@ -1,16 +1,6 @@
 [workspace]
-edition = "2021"
-license = "MIT/Apache-2.0"
 members = [
     "common",
     "frontend",
     "server",
 ]
-
-# We need to use a custom branch of wasm-bindgen because the MediaSession API hasn't been merged yet
-# The PR for this is https://github.com/rustwasm/wasm-bindgen/pull/2926
-[patch.crates-io]
-js-sys = { git = "https://github.com/rozbb/wasm-bindgen", branch = "add_mediasession_api" }
-web-sys = { git = "https://github.com/rozbb/wasm-bindgen", branch = "add_mediasession_api" }
-wasm-bindgen = { git = "https://github.com/rozbb/wasm-bindgen", branch = "add_mediasession_api" }
-wasm-bindgen-futures = { git = "https://github.com/rozbb/wasm-bindgen", branch = "add_mediasession_api" }

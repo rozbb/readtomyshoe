@@ -35,10 +35,11 @@ You need to have OpenSSL installed on your machine:
 
 ### Other setup
 
-This requires a custom version of everything related wasm-bindgen because the `MediaSession` API has not yet been merged into `web_sys`. Do the following:
+We need a few utilities for building the website. Run the following:
 
-* `cargo install --locked trunk cargo-watch wasm-bindgen-cli`
-* `rustup target add wasm32-unknown-unknown`
+* `rustup target add wasm32-unknown-unknown`. This installs the WASM target so Rust knows how to output code for the browser.
+* `cargo install --locked trunk`. The `trunk` utility packages the frontend assets of the website.
+* If you're on an M1 Mac, run  `cargo install --locked wasm-bindgen-cli`. This is because `trunk` doesn't know how to download the bindgen CLI itself ([tracking issue](https://github.com/thedodd/trunk/pull/375)).
 
 ### Dev Setup
 
@@ -48,6 +49,8 @@ If you want to work on this repo in an IDE, it will be easiest if you put the fo
 rustflags = ["--cfg=web_sys_unstable_apis"]
 rustdocflags=["--cfg=web_sys_unstable_apis"]
 ```
+
+You'll also need to run `cargo install cargo-watch` in order to use `script/dev.sh`. This is a filesystem watcher that tells the server to autoreload whenever a file is changed.
 
 ## Usage
 

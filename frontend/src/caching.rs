@@ -9,6 +9,7 @@ use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{
     Blob, BlobPropertyBag, Event, IdbDatabase, IdbObjectStoreParameters, IdbTransactionMode,
+    RegistrationOptions,
 };
 
 const SERVICE_WORKER_PATH: &str = "/service_worker.js";
@@ -29,12 +30,18 @@ pub fn register_service_worker() {
 
     // Just point at the SERVICE_WORKER_PATH and let the JS file handle the rest
     spawn_local(async move {
-        let reg_promise = sw_container.register(SERVICE_WORKER_PATH);
+        // The service worker lives in /assets/, so make sure it has access to the whole site
+        let mut reg_options = RegistrationOptions::new();
+        reg_options.scope("./");
+
+        // Register
+        let reg_promise = sw_container.register_with_options(SERVICE_WORKER_PATH, &reg_options);
         let res = JsFuture::from(reg_promise).await;
-        tracing::debug!("Registered service worker");
 
         if let Err(e) = res {
             tracing::error!("Error registering service worker: {:?}", e);
+        } else {
+            tracing::debug!("Registered service worker");
         }
     });
 }

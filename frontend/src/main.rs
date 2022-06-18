@@ -48,5 +48,6 @@ fn main() {
     tracing_wasm::set_as_global_default();
 
     caching::register_service_worker();
+
     yew::start_app::<App>();
 }

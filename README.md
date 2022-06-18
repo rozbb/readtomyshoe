@@ -17,11 +17,21 @@ We use Google Cloud's text to speech engine. Here's how to get an API key:
     * Click "Edit API key"
     * Under "API restrictions" click "Restrict key"
     * Select "Cloud Text-to-Speech API"
-* Now copy your API key to the clipboard, create a new file `server/gcp_api.key`, and paste it there
+* Now copy your API key to the clipboard
+
+Once you've got your API key, you need to give it to the readtomyshoe server:
+
+* Create a new file in the `server/` directory, called `gcp_api.key`
+* Paste the API key into that file
+
+That's it!
 
 ### OpenSSL
 
-You need to have OpenSSL installed on your machine. For Ubuntu, just `sudo apt install libssl-dev`.
+You need to have OpenSSL installed on your machine:
+
+* For Ubuntu and Debian, do `sudo apt-get install libssl-dev`
+* For Mac, do `brew install openssl`
 
 ### Other setup
 
@@ -29,11 +39,14 @@ This requires a custom version of everything related wasm-bindgen because the `M
 
 * `cargo install --locked trunk cargo-watch wasm-bindgen-cli`
 * `rustup target add wasm32-unknown-unknown`
-* Set the following in `~/.cargo/config`. This is because `web_sys` gates unstable features via cfg. I know this is very weird.
+
+### Dev Setup
+
+If you want to work on this repo in an IDE, it will be easiest if you put the following lines in your `~/.cargo/config` file. This is because `web_sys` gates unstable features via cfg. I know this is very weird.
 ```
 [build]
 rustflags = ["--cfg=web_sys_unstable_apis"]
-rustdocflags = ["--cfg=web_sys_unstable_apis"]
+rustdocflags=["--cfg=web_sys_unstable_apis"]
 ```
 
 ## Usage
@@ -42,7 +55,7 @@ Run the dev version (auto-reloads server & client on file change) with `./script
 
 Run the pre-compiled version with `./scripts/prod.sh`.
 
-The app will start at https://localhost:8080 by default.
+The app will start at `https://localhost:8080` by default. **The default behavior is to make the service visible to your whole local network.** To make it only accessible from your own machine, delete `--address 0.0.0.0` from `dev.sh` and/or `prod.sh`.
 
 ## Thanks
 

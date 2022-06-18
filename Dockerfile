@@ -60,4 +60,4 @@ COPY ./server/gcp_api.key ./server/
 # Go to where the binary is
 WORKDIR /app/server
 
-# No CMD or ENTRYPOINT, see fly.toml with `cmd` override.
+CMD ./readtomyshoe-server --port 8080 --addr 0.0.0.0

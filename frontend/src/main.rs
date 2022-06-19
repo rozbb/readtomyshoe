@@ -4,7 +4,6 @@ use std::rc::Rc;
 mod add_view;
 mod app_view;
 mod caching;
-mod fetch_article;
 mod library_view;
 mod main_view;
 mod player_view;

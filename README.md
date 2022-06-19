@@ -60,6 +60,23 @@ Run the pre-compiled version with `./scripts/prod.sh`.
 
 The app will start at `https://localhost:8080` by default. **The default behavior is to make the service visible to your whole local network.** To make it only accessible from your own machine, delete `--address 0.0.0.0` from `dev.sh` and/or `prod.sh`.
 
+## TODO
+
+An incomplete to-do list, roughly in order of most important to least important:
+
+- [ ] Implement fetch-by-url
+- [ ] Implement "next track" functionality with queue
+- [ ] Handle errors in article fetch better: delete temp files, implement retries
+- [ ] Save current article, playback position, and speed
+- [ ] Save more metadata than article title: id, url, title, byline, text. Maybe store in the ID3v2 tags?
+- [ ] Show more detailed progress in the add article view
+- [ ] Make styling not terrible
+- [ ] Make whole site WCAG-compliant
+- [ ] Make queue order mutable
+- [ ] Fix caching in dev mode (the trouble is that assets are in `/assets/` in prod, but `/` in dev)
+- [ ] Implement login functionality and make per-user libraries
+- [ ] Write rate-limiting code for TTS service
+
 ## Thanks
 
 A lot of the ideas and code in this crate started with Robert Krahn's [fantastic template](https://robert.kra.hn/posts/2022-04-03_rust-web-wasm/#making-the-file-server-support-a-spa-app). Thanks

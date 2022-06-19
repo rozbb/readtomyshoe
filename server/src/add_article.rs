@@ -58,7 +58,7 @@ async fn add_article(
     let text = format!("{title}. {body}");
     let req = TtsRequest {
         text,
-        use_wavenet: false,
+        use_wavenet: true,
     };
 
     // Make the TTS request

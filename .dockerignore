@@ -2,4 +2,3 @@ gcp_api.key
 Dockerfile
 fly.toml
 /target
-*.mp3

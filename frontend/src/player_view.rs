@@ -256,17 +256,10 @@ struct Actions {
 
 /// The Player component of our app. This handles all the player logic.
 pub struct Player {
-    actions: Actions,
+    /// These are all the callbacks for MediaSession events like pause or jump forward. These need
+    /// to live in the `Player` because otherwise they go out of scope
+    _actions: Actions,
     playback_speed: f64,
-}
-
-impl Default for Player {
-    fn default() -> Self {
-        Player {
-            actions: Actions::default(),
-            playback_speed: 1.0,
-        }
-    }
 }
 
 impl Component for Player {
@@ -309,7 +302,10 @@ impl Component for Player {
         set_callbacks(&get_media_session(), &actions);
 
         // TODO: Load playback speed from cache
-        Self::default()
+        Self {
+            _actions: actions,
+            playback_speed: 1.0,
+        }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {

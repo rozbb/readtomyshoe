@@ -6,9 +6,12 @@ use std::future::ready;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::str::FromStr;
 
-use axum::http::StatusCode;
-use axum::routing::{get, get_service};
-use axum::Router;
+use axum::{
+    http::{HeaderValue, StatusCode},
+    response::Response,
+    routing::{get, get_service},
+    Router,
+};
 use axum_extra::routing::SpaRouter;
 use clap::Parser;
 use tower::ServiceBuilder;
@@ -63,18 +66,27 @@ async fn main() {
     let audio_blob_service = get_service(ServeDir::new("audio_blobs"))
         .handle_error(|_| ready(StatusCode::INTERNAL_SERVER_ERROR));
 
+    // Add a Service-Worker-Allowed header to the static assets. This allows a service worker from
+    // /assets/ to cache items from the root directory
+    let header_appender = ServiceBuilder::new().map_response(|mut resp: Response| {
+        let headers = resp.headers_mut();
+        headers.insert("Service-Worker-Allowed", HeaderValue::from_static("/"));
+        resp
+    });
+    let asset_router = SpaRouter::new("/assets", &opt.static_dir).index_file(&opt.index_file);
+    let asset_router = Router::from(asset_router).layer(header_appender);
+
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .nest("/api/audio-blobs", audio_blob_service)
-        .merge(SpaRouter::new("/assets", &opt.static_dir).index_file(&opt.index_file));
+        .merge(asset_router);
 
     // Set up /api/list-articles
     let app = list_articles::setup(app, &opt.audio_blob_dir);
     let app = add_article::setup(app, &opt.audio_blob_dir);
 
     // Tracing for the entire app
-    let tracing_layer = TraceLayer::new_for_http();
-    let app = app.layer(ServiceBuilder::new().layer(tracing_layer));
+    let app = app.layer(TraceLayer::new_for_http());
 
     // Set up the server
     let sock_addr = SocketAddr::from((

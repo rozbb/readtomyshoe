@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use anyhow::{bail, Error as AnyError};
 use gloo_utils::window;
-use serde::de::DeserializeOwned;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{
@@ -12,7 +11,8 @@ use web_sys::{
     RegistrationOptions,
 };
 
-const SERVICE_WORKER_PATH: &str = "/service_worker.js";
+// TODO Fixme: This path is only valid in production mode
+const SERVICE_WORKER_PATH: &str = "/assets/service-worker.js";
 
 const DB_NAME: &str = "readtomyshoe";
 const DB_VERSION: u32 = 1;

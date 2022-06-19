@@ -18,7 +18,6 @@ const AUDIO_MIME_FORMAT: &str = "audio/mp3";
 
 // Always jump by 10sec
 const JUMP_SIZE: f64 = 10.0;
-const PLAYBACK_SPEEDS: &[f64] = &[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0];
 
 /// Helper function to retrieve the only audio element from the page
 fn get_audio_elem() -> HtmlAudioElement {

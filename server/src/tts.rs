@@ -1,14 +1,9 @@
 //! Implements a barebones client to the Google Cloud TTS service
 
-use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
-use std::time::{self, UNIX_EPOCH};
-
 use anyhow::{bail, Error};
 use bytes::Bytes;
 use futures::Future;
-use reqwest::Error as ReqwestError;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 /// Path to the file that holds the Google Cloud API key
 const API_KEY_FILE: &str = "gcp_api.key";

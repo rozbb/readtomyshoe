@@ -6,8 +6,8 @@ const cacheName = "readtomyshow-v1";
 const appShellFiles = [
     "/",
     "/index.html",
-    "/readtomyshoe-frontend.js",
-    "/readtomyshoe-frontend_bg.wasm"
+    "/assets/readtomyshoe-frontend.js",
+    "/assets/readtomyshoe-frontend_bg.wasm"
 ];
 
 // Add to caches on installation
@@ -46,10 +46,10 @@ self.addEventListener('fetch', (e) => {
 
         // Do not cache other things like API calls.
         /*
-        // Finally, cache the newly fetched resource
-        console.log(`[Service Worker] Caching new resource: ${e.request.url}`);
-        cache.put(e.request, response.clone());
-        return response;
+            // Finally, cache the newly fetched resource
+            console.log(`[Service Worker] Caching new resource: ${e.request.url}`);
+            cache.put(e.request, response.clone());
+            return response;
         */
     })());
 });

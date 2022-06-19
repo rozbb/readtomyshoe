@@ -4,13 +4,9 @@ use crate::{
     WeakComponentLink,
 };
 
-use common::ArticleList;
-
-use gloo_net::http::Request;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
-use yew_router::prelude::*;
 
 #[derive(PartialEq, Properties)]
 pub struct Props {

@@ -1,6 +1,4 @@
-use crate::{
-    add_view::Add, library_view::Library, player_view::Player, queue_view::Queue, WeakComponentLink,
-};
+use crate::{library_view::Library, player_view::Player, queue_view::Queue, WeakComponentLink};
 
 use yew::prelude::*;
 

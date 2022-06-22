@@ -29,27 +29,27 @@ self.addEventListener('activate', (e) => {
     }));
 });
 
-// Respond to fetches with the cached content
+// Try to fetch content from the network. On failure, serve from the cache.
 self.addEventListener('fetch', (e) => {
+    // We don't cache API calls
+    const reqUrl = new URL(e.request.url);
+    if (reqUrl.pathname.startsWith("/api")) {
+        return;
+    }
+
+    // Respond to asset fetches as follows
     e.respondWith((async () => {
-        // If there's a cache hit, return it
-        const r = await caches.match(e.request);
-        console.log(`[Service Worker] Fetching resource: ${e.request.url}`);
-        if (r) {
-            return r;
-        }
-
-        // Otherwise, fetch the resource normally
-        const response = await fetch(e.request);
-        const cache = await caches.open(cacheName);
-        return response;
-
-        // Do not cache other things like API calls.
-        /*
-            // Finally, cache the newly fetched resource
-            console.log(`[Service Worker] Caching new resource: ${e.request.url}`);
+        // Try to fetch the resource normally
+        var cache = await caches.open(cacheName);
+        try {
+            const response = await fetch(e.request);
+            // If fetch succeeded, cache the result and return it
             cache.put(e.request, response.clone());
             return response;
-        */
+        } catch {
+            // If fetching fails, try to hit the cache
+            const c = await caches.match(e.request);
+            return c;
+        }
     })());
 });

@@ -14,7 +14,6 @@ const GCP_TTS_API: &str = "https://texttospeech.googleapis.com/v1beta1/text:synt
 // See https://cloud.google.com/text-to-speech/quotas
 const MAX_CHARS_PER_REQUEST: usize = 5000;
 const MAX_REQUESTS_PER_MINUTE: usize = 1000;
-const MAX_CHARS_PER_MINUTE: usize = 500000;
 
 #[derive(Deserialize)]
 struct AudioResponse<'a> {

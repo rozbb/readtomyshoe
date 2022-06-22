@@ -3,7 +3,7 @@ use common::{ArticleTextSubmission, ArticleUrlSubmission};
 
 use std::{fs::OpenOptions, io::Write, path::Path};
 
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use async_process::Command;
 use axum::{extract::Extension, response::IntoResponse, routing::post, Json, Router};
 use serde::Deserialize;
@@ -91,6 +91,8 @@ async fn add_article_by_url(
     Json(ArticleUrlSubmission { url }): Json<ArticleUrlSubmission>,
     audio_blob_dir: Extension<String>,
 ) -> Result<impl IntoResponse, AddArticleError> {
+    // TODO: Check earlier that trafilatura is present
+
     // Run trafilatura on the given URL
     let output = Command::new("../python_deps/bin/trafilatura")
         .env("PYTHONPATH", "../python_deps")
@@ -108,16 +110,6 @@ async fn add_article_by_url(
         ))?;
     }
 
-    tracing::debug!("trafilatura status: {:?}", output.status);
-    tracing::debug!(
-        "trafilatura stdout: {:?}",
-        String::from_utf8_lossy(&output.stdout)
-    );
-    tracing::debug!(
-        "trafilatura stderr: {:?}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
     // Convert the CLI output from JSON and turn it into a `ArticleTextSubmission`
     let parsed_res: ExtractedArticle = serde_json::from_slice(&output.stdout)
         .map_err(|e| anyhow!("Error parsing trafilatura JSON: {:?}", e))?;
@@ -125,7 +117,6 @@ async fn add_article_by_url(
         title: parsed_res.title,
         body: parsed_res.text,
     };
-    tracing::debug!("Got body {}", text_submission.body);
 
     // Now that we have the article body, call down to add_article_by_text
     add_article_by_text(Json(text_submission), audio_blob_dir).await

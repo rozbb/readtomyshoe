@@ -1,10 +1,12 @@
 use crate::tts::{get_api_key, tts, TtsRequest};
-use common::ArticleSubmission;
+use common::{ArticleTextSubmission, ArticleUrlSubmission};
 
 use std::{fs::OpenOptions, io::Write, path::Path};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
+use async_process::Command;
 use axum::{extract::Extension, response::IntoResponse, routing::post, Json, Router};
+use serde::Deserialize;
 
 struct AddArticleError(anyhow::Error);
 
@@ -28,14 +30,15 @@ pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
     router.nest(
         "/api",
         Router::new()
-            .route("/add-article", post(add_article))
+            .route("/add-article-by-text", post(add_article_by_text))
+            .route("/add-article-by-url", post(add_article_by_url))
             .layer(Extension(audio_blob_dir.to_string())),
     )
 }
 
-/// Lists the articles in the audio blob directory
-async fn add_article(
-    Json(ArticleSubmission { title, body }): Json<ArticleSubmission>,
+/// Converts the given article contents to speech, and returns the new filename
+async fn add_article_by_text(
+    Json(ArticleTextSubmission { title, body }): Json<ArticleTextSubmission>,
     Extension(audio_blob_dir): Extension<String>,
 ) -> Result<impl IntoResponse, AddArticleError> {
     // Open a new MP3 file. Fail if the file already exists
@@ -72,4 +75,58 @@ async fn add_article(
         .map_err(|e| anyhow!("Save failed: {:?}", e))?;
 
     Ok(title)
+}
+
+/// A portion of trafilatura's extracted text. The rest of the fields are: title, author, hostname,
+/// date, categories, tags, fingerprint, id, license, comments, raw_text, source, source_hostname,
+/// excerpt, text
+#[derive(Deserialize)]
+struct ExtractedArticle {
+    title: String,
+    text: String,
+}
+
+/// Fetches the article at the given URL, converts it to speech, and returns the new filename
+async fn add_article_by_url(
+    Json(ArticleUrlSubmission { url }): Json<ArticleUrlSubmission>,
+    audio_blob_dir: Extension<String>,
+) -> Result<impl IntoResponse, AddArticleError> {
+    // Run trafilatura on the given URL
+    let output = Command::new("../python_deps/bin/trafilatura")
+        .env("PYTHONPATH", "../python_deps")
+        .arg("--json")
+        .arg("--URL")
+        .arg(url)
+        .output()
+        .await
+        .map_err(|e| anyhow!("IO error running trafulatura: {:?}", e))?;
+    // See if the command failed
+    if !output.status.success() {
+        Err(anyhow!(
+            "Error running trafilatura: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))?;
+    }
+
+    tracing::debug!("trafilatura status: {:?}", output.status);
+    tracing::debug!(
+        "trafilatura stdout: {:?}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    tracing::debug!(
+        "trafilatura stderr: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Convert the CLI output from JSON and turn it into a `ArticleTextSubmission`
+    let parsed_res: ExtractedArticle = serde_json::from_slice(&output.stdout)
+        .map_err(|e| anyhow!("Error parsing trafilatura JSON: {:?}", e))?;
+    let text_submission = ArticleTextSubmission {
+        title: parsed_res.title,
+        body: parsed_res.text,
+    };
+    tracing::debug!("Got body {}", text_submission.body);
+
+    // Now that we have the article body, call down to add_article_by_text
+    add_article_by_text(Json(text_submission), audio_blob_dir).await
 }

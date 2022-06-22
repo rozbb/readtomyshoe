@@ -33,6 +33,18 @@ You need to have OpenSSL installed on your machine:
 * For Ubuntu and Debian, do `sudo apt-get install libssl-dev`
 * For Mac, do `brew install openssl`
 
+### Python dependencies
+
+We use `trafilatura` for article content extraction. This is installed directly in the local directory. Make sure you have `pip3` installed, then run:
+
+```
+pip3 install trafilatura -t python_deps
+```
+
+ReadToMyShoe will now be able to use the `python_deps/bin/trafilatura` binary.
+
+**For devs:** If you wanna run `trafilatura` yourself, first `cd python_deps`, then run `PYTHONPATH=. ./bin/trafilatura`
+ 
 ### Other setup
 
 We need a few utilities for building the website. Run the following:

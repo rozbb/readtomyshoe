@@ -36,7 +36,7 @@ FROM debian:bullseye-slim
 # Need certs for talking to Google Cloud
 RUN \
   apt-get update && \
-  apt-get install -y ca-certificates && \
+  apt-get install -y ca-certificates python3-pip && \
   apt-get clean
 
 # Run as "app" user
@@ -49,8 +49,12 @@ WORKDIR /app
 RUN mkdir server
 RUN mkdir server/audio_blobs
 
+# Get python deps
+RUN pip3 install trafilatura -t python_deps
+
 # Get compiled binaries and assets from the builder's cargo install directory
 COPY --from=builder /usr/src/app/dist /app/dist
+COPY --from=builder /usr/src/app/server/audio_blobs /app/server/audio_blobs
 COPY --from=builder /usr/local/cargo/bin/readtomyshoe-server /app/server/readtomyshoe-server
 
 # Copy the API key

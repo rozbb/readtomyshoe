@@ -33,7 +33,7 @@ RUN RUSTFLAGS=--cfg=web_sys_unstable_apis ./scripts/prodbuild.sh
 # Runtime image
 FROM debian:bullseye-slim
 
-# Need certs for talking to Google Cloud
+# Need certs for talking to Google Cloud, and python3 for doing article extraction
 RUN \
   apt-get update && \
   apt-get install -y ca-certificates python3-pip && \
@@ -49,7 +49,7 @@ WORKDIR /app
 RUN mkdir server
 RUN mkdir server/audio_blobs
 
-# Get python deps
+# Install trafilatura
 RUN pip3 install trafilatura -t python_deps
 
 # Get compiled binaries and assets from the builder's cargo install directory

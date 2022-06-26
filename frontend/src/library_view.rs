@@ -35,7 +35,8 @@ async fn fetch_article_list() -> Result<ArticleList, AnyError> {
 /// Fetches a specific article
 pub async fn fetch_article(title: &str) -> Result<CachedArticle, AnyError> {
     // Fetch the audio blobs
-    let resp = Request::get(&format!("/api/audio-blobs/{title}"))
+    let encoded_title = urlencoding::encode(title);
+    let resp = Request::get(&format!("/api/audio-blobs/{encoded_title}"))
         .send()
         .await
         .map_err(|e| {

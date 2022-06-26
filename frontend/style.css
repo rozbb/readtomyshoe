@@ -1,0 +1,96 @@
+/*
+ * Some general styling
+ */
+
+body {
+    font: 18px/1.62 sans-serif;
+    margin: 1em auto;
+    padding: 0 1rem;
+    max-width: 40em;
+}
+
+ul {
+    list-style: none;
+    padding-left: 1rem;
+}
+
+li {
+    padding: 0.5rem 0;
+}
+
+
+label {
+    margin-right: 0.5rem;
+}
+
+a {
+    color: blue;
+}
+
+/*
+ * Color choices for dark mode
+ */
+@media (prefers-color-scheme: dark) {
+    body {
+        color: #ccc;
+        background: #1b1b1b;
+    }
+
+    a {
+        color: #5bf;
+    }
+
+    textarea, input[type="text"] {
+      border-radius: 3px;
+      background-color: #ccc;
+    }
+}
+
+/*
+ * List items should not be blocks
+ */
+li>p {
+    display: inline;
+}
+
+
+/*
+ * Library and queue buttons should be bold and offset
+ */
+li>button {
+    margin-right: 1rem;
+    font-weight: bold;
+}
+
+/*
+ * Make the skip buttons big and offset from the audio scrubber
+ */
+.audiocontrol>button {
+    margin-right: 1rem;
+    font-size: 25px;
+}
+audio {
+    margin-bottom: 1rem;
+}
+
+/*
+ * Small tweaks to Add Article view
+ */
+
+fieldset {
+    border-width: 0px;
+}
+
+fieldset>label {
+    vertical-align: top;
+    text-align: right;
+}
+
+fieldset>textarea {
+    width: 100%;
+}
+
+fieldset>input {
+    width: 100%;
+    max-width: 60%;
+}

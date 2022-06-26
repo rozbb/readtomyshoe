@@ -27,8 +27,8 @@ impl Component for Main {
         let player_link = &ctx.props().player_link;
 
         html! {
-            <div class="main">
-                <h1>{ "Main View" }</h1>
+            <main>
+                <h1>{ "🥾ReadToMyShoe" }</h1>
                 <h2>{ "Library" }</h2>
                 <a href="/add" style="font-weight: bold">{ "Add Article" }</a>
                 <Library {queue_link} />
@@ -36,7 +36,7 @@ impl Component for Main {
                 <Queue {queue_link} {player_link} />
                 <h2>{ "Player" }</h2>
                 <Player {player_link} />
-            </div>
+            </main>
         }
     }
 }

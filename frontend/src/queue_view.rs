@@ -6,7 +6,7 @@ use crate::{
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen_futures::spawn_local;
-use yew::prelude::*;
+use yew::{html::Scope, prelude::*};
 
 #[derive(PartialEq, Properties)]
 pub struct Props {
@@ -98,26 +98,44 @@ impl Component for Queue {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        self.article_handles
+        let player_link = &ctx.props().player_link;
+        let queue_link = &ctx.props().queue_link;
+
+        let rendered_list = self
+            .article_handles
             .iter()
             .enumerate()
-            .map(|(i, handle)| {
-                let player_link = ctx.props().player_link.borrow().clone().unwrap();
-                let queue_link = ctx.props().queue_link.borrow().clone().unwrap();
+            .map(|(i, handle)| render_queue_item(handle, i, player_link, queue_link))
+            .collect::<Html>();
+        html! {
+            <section title="queue">
+                <ul>
+                    { rendered_list }
+                </ul>
+            </section>
+        }
+    }
+}
 
-                let handle_copy = handle.clone();
-                let play_callback = Callback::from(move |_| {
-                    player_link.send_message(PlayerMsg::PlayHandle(handle_copy.clone()));
-                });
-                let remove_callback = queue_link.callback(move |_| QueueMsg::Delete(i));
-                html! {
-                    <p>
-                        <button onclick={remove_callback}>{ "🗑" }</button>
-                        {&handle.0}
-                        <button onclick={play_callback}>{ "▶️" }</button>
-                    </p>
-                }
-            })
-            .collect::<Html>()
+fn render_queue_item(
+    handle: &CachedArticleHandle,
+    pos: usize,
+    player_link: &WeakComponentLink<Player>,
+    queue_link: &WeakComponentLink<Queue>,
+) -> Html {
+    let player_scope = player_link.borrow().clone().unwrap();
+    let queue_scope = queue_link.borrow().clone().unwrap();
+    let handle_copy = handle.clone();
+
+    let play_callback = Callback::from(move |_| {
+        player_scope.send_message(PlayerMsg::PlayHandle(handle_copy.clone()));
+    });
+    let remove_callback = queue_scope.callback(move |_| QueueMsg::Delete(pos));
+    html! {
+        <li>
+            <button title="Delete from queue" onclick={remove_callback}>{ "🗑" }</button>
+            <button title="Play" onclick={play_callback}>{ "▶️" }</button>
+            <p> {&handle.0} </p>
+        </li>
     }
 }

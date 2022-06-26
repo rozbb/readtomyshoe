@@ -72,11 +72,12 @@ fn render_lib_item(title: String, library_link: Scope<Library>) -> Html {
     let callback = library_link.callback(move |_| LibraryMsg::FetchArticle(title_copy.clone()));
 
     html! {
-        <span>
-            <p>{title}
-                <button onclick={callback}>{ "+" }</button>
-            </p>
-        </span>
+        <li>
+            <button onclick={callback} class="addToQueue" title="Add to queue">
+                { "+" }
+            </button>
+            <p>{title}</p>
+        </li>
     }
 }
 
@@ -170,10 +171,18 @@ impl Component for Library {
             }
         } else if let Some(list) = &self.list {
             // If there's a list, render all the items
-            list.titles
+            let rendered_list = list
+                .titles
                 .iter()
                 .map(|title| render_lib_item(title.clone(), ctx.link().clone()))
-                .collect::<Html>()
+                .collect::<Html>();
+            html! {
+                <section title="library">
+                    <ul>
+                        { rendered_list }
+                    </ul>
+                </section>
+            }
         } else {
             Default::default()
         }

@@ -170,52 +170,35 @@ impl Component for Add {
             .unwrap_or("".to_string());
 
         html! {
-            <div id="add">
+            <main>
                 <h2>{ "Add Article" }</h2>
-                <div id="add-url">
-                    <section>
-                        <p>
-                            <label for={URL_FORM_ID}>{ "Article url" }</label>
-                            <input type="text" id={URL_FORM_ID} required=true />
-                        </p>
-                    </section>
-                    <section>
-                        <button onclick={add_url_callback}>{ "Submit" }</button>
-                    </section>
-                    <section id="progress">
-                        <p>
-                            { self.progress.join(" ") }
-                        </p>
-                    </section>
-                </div>
+                <fieldset title="Add by URL">
+                    <label for={URL_FORM_ID}>{ "Article URL:" }</label>
+                    <input type="text" id={URL_FORM_ID} required=true />
+                    <br />
+                    <button onclick={add_url_callback}>{ "Submit" }</button>
+                </fieldset>
                 <p style="font-weight: bold">{ " OR " }</p>
-                <div id="add-text">
-                    <section>
-                        <p>
-                            <label for={TITLE_FORM_ID}>{ "Article title" }</label>
-                            <input type="text" id={TITLE_FORM_ID} required=true />
-                        </p>
-                        <p>
-                            <label for={BODY_FORM_ID}>{ "Article body" }</label>
-                            <textarea id={BODY_FORM_ID} rows="10" cols="33" required=true></textarea>
-                        </p>
-                    </section>
-                    <section>
-                        <button onclick={add_text_callback}>{ "Submit" }</button>
-                    </section>
-                    <section id="progress">
-                        <p>
-                            { self.progress.join(" ") }
-                        </p>
-                    </section>
-                </div>
-                <section id="errors">
+                <fieldset title="Add by text">
+                    <label for={TITLE_FORM_ID}>{ "Article title:" }</label>
+                    <input type="text" id={TITLE_FORM_ID} required=true />
+                    <br />
+                    <label for={BODY_FORM_ID}>{ "Article body:" }</label>
+                    <textarea id={BODY_FORM_ID} rows="10" cols="33" required=true></textarea>
+                    <br />
+                    <button onclick={add_text_callback}>{ "Submit" }</button>
+                </fieldset>
+                <section id="progress" title="progress">
+                    <p>
+                        { self.progress.join(" ") }
+                    </p>
+                </section>
+                <section id="errors" title="errors">
                     <p style={ "color: red;" }>
                         { err_str }
                     </p>
                 </section>
-
-            </div>
+            </main>
         }
     }
 }

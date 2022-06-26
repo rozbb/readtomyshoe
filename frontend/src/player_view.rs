@@ -315,28 +315,29 @@ impl Component for Player {
         let playback_speed_cb = ctx.link().callback(|_| PlayerMsg::UpdatePlaybackSpeed);
 
         html! {
-            <div>
+            <section title="player">
                 <audio controls=true style={ "display: block;" } id={PLAYER_ID}>
                     { "Your browser does not support the <code>audio</code> element" }
                 </audio>
-                <br />
-                <button onclick={jump_backward_cb}>{ "↩️" }</button>
-                <button onclick={jump_forward_cb}>{ "↪️" }</button>
-                <br />
-                <label for={SPEED_SELECTOR_ID}>{ "Playback Speed:" }</label>
-                <select name={SPEED_SELECTOR_ID} id={SPEED_SELECTOR_ID} onchange={playback_speed_cb}>
-                    <option value="0.5">{ "0.5" }</option>
-                    <option value="0.75">{ "0.75" }</option>
-                    <option value="1" selected=true>{ "1" }</option>
-                    <option value="1.25">{ "1.25" }</option>
-                    <option value="1.5">{ "1.5" }</option>
-                    <option value="1.75">{ "1.75" }</option>
-                    <option value="2">{ "2" }</option>
-                    <option value="2.5">{ "2.5" }</option>
-                    <option value="3">{ "3" }</option>
-                    <option value="4">{ "4" }</option>
-                </select>
-            </div>
+                <div class="audiocontrol" title="More playback controls">
+                    <button title="Jump backwards 10 seconds" onclick={jump_backward_cb}>{ "↩️" }</button>
+                    <button title="Jump forwards 10 seconds" onclick={jump_forward_cb}>{ "↪️" }</button>
+
+                    <label for={SPEED_SELECTOR_ID}>{ "Playback Speed:" }</label>
+                    <select title="Playback speed" name={SPEED_SELECTOR_ID} id={SPEED_SELECTOR_ID} onchange={playback_speed_cb}>
+                        <option value="0.5">{ "0.5" }</option>
+                        <option value="0.75">{ "0.75" }</option>
+                        <option value="1" selected=true>{ "1" }</option>
+                        <option value="1.25">{ "1.25" }</option>
+                        <option value="1.5">{ "1.5" }</option>
+                        <option value="1.75">{ "1.75" }</option>
+                        <option value="2">{ "2" }</option>
+                        <option value="2.5">{ "2.5" }</option>
+                        <option value="3">{ "3" }</option>
+                        <option value="4">{ "4" }</option>
+                    </select>
+                </div>
+            </section>
         }
     }
 }

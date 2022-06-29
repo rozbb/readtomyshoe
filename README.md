@@ -76,13 +76,13 @@ The app will start at `https://localhost:8080` by default. **The default behavio
 
 An incomplete to-do list, roughly in order of most important to least important:
 
-- [ ] Implement fetch-by-url
-- [ ] Implement "next track" functionality with queue
-- [ ] Handle errors in article fetch better: delete temp files, implement retries
 - [ ] Save current article, playback position, and speed
+- [ ] Write an accessible progress notifs for adding to queue, and error notifs for fetch and what not
+- [ ] Sort library by date added
+- [ ] Implement "next track" functionality with queue
+- [ ] Handle errors in article fetch better: delete temp files, implement retries to Google TTS
 - [ ] Save more metadata than article title: id, url, title, byline, text. Maybe store in the ID3v2 tags?
 - [ ] Show more detailed progress in the add article view
-- [ ] Make styling not terrible
 - [ ] Make whole site WCAG-compliant
 - [ ] Make queue order mutable
 - [ ] Fix caching in dev mode (the trouble is that assets are in `/assets/` in prod, but `/` in dev)

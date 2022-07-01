@@ -1,6 +1,5 @@
 use crate::{
-    add_view::Add, library_view::Library, main_view::Main, player_view::Player, queue_view::Queue,
-    WeakComponentLink,
+    add_view::Add, main_view::Main, player_view::Player, queue_view::Queue, WeakComponentLink,
 };
 
 use yew::prelude::*;

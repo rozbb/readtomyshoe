@@ -322,6 +322,8 @@ impl Component for Player {
                 <div class="audiocontrol" title="More playback controls">
                     <button title="Jump backwards 10 seconds" onclick={jump_backward_cb}>{ "↩️" }</button>
                     <button title="Jump forwards 10 seconds" onclick={jump_forward_cb}>{ "↪️" }</button>
+                    <br />
+                    <br />
 
                     <label for={SPEED_SELECTOR_ID}>{ "Playback Speed:" }</label>
                     <select title="Playback speed" name={SPEED_SELECTOR_ID} id={SPEED_SELECTOR_ID} onchange={playback_speed_cb}>

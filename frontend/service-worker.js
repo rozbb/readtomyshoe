@@ -31,9 +31,9 @@ self.addEventListener('activate', (e) => {
 
 // Try to fetch content from the network. On failure, serve from the cache.
 self.addEventListener('fetch', (e) => {
-    // We don't cache API calls
+    // We don't cache API calls or internal pages
     const reqUrl = new URL(e.request.url);
-    if (reqUrl.pathname.startsWith("/api")) {
+    if (reqUrl.pathname.startsWith("/api") || reqUrl.pathname.startsWith("/add")) {
         return;
     }
 

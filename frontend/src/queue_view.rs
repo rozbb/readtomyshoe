@@ -6,7 +6,7 @@ use crate::{
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen_futures::spawn_local;
-use yew::{html::Scope, prelude::*};
+use yew::prelude::*;
 
 #[derive(PartialEq, Properties)]
 pub struct Props {
@@ -17,11 +17,9 @@ pub struct Props {
 }
 
 pub enum QueueMsg {
-    Add(CachedArticle),
-    Delete(usize),
     AddHandle(CachedArticleHandle),
+    Delete(usize),
     LoadFrom(Vec<CachedArticleHandle>),
-    Remove(usize),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -36,16 +34,15 @@ pub struct CachedArticleHandle(pub(crate) String);
 
 pub struct QueuePosition {
     /// Title of article currently playing
-    cur_article: String,
+    cur_article: CachedArticleHandle,
     /// Current timestamp in the playback
     cur_timestamp: f64,
 }
 
 #[derive(Default)]
 pub struct Queue {
-    articles: Vec<CachedArticle>,
     article_handles: Vec<CachedArticleHandle>,
-    cur_pos: usize,
+    cur_pos: Option<QueuePosition>,
 }
 
 impl Component for Queue {
@@ -54,7 +51,6 @@ impl Component for Queue {
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            QueueMsg::Add(article) => self.articles.push(article),
             QueueMsg::Delete(idx) => {
                 // Remove the handle from the queue and delete it from the cache
                 let handle = self.article_handles.remove(idx);
@@ -69,9 +65,6 @@ impl Component for Queue {
             QueueMsg::AddHandle(handle) => self.article_handles.push(handle),
             QueueMsg::LoadFrom(handles) => {
                 self.article_handles = handles;
-            }
-            QueueMsg::Remove(idx) => {
-                self.articles.remove(idx);
             }
         }
 

@@ -30,6 +30,15 @@ pub fn register_service_worker() {
 
     // Just point at the SERVICE_WORKER_PATH and let the JS file handle the rest
     spawn_local(async move {
+        // Wait until the container is ready
+        match sw_container.ready() {
+            Ok(p) => JsFuture::from(p).await.unwrap(),
+            Err(e) => {
+                tracing::error!("Couldn't ready ServiceWorker: {:?}", e);
+                return;
+            }
+        };
+
         // The service worker lives in /assets/, so make sure it has access to the whole site
         let mut reg_options = RegistrationOptions::new();
         reg_options.scope("./");

@@ -37,11 +37,10 @@ You need to have OpenSSL installed on your machine:
 
 ### Python dependencies
 
-We use `trafilatura` for article content extraction. This is installed directly in the local directory. Make sure you have `pip3` installed, then run, in `readtomyshoe/`:
+We use `trafilatura` for article content extraction. This is installed directly in the local directory. 
 
-```
-pip3 install trafilatura -t python_deps
-```
+* Install `pip3`. On a Mac: `brew install python3`. On Ubuntu: `sudo apt-get install python3-pip`.
+* In `readtomyshoe/`, run `pip3 install trafilatura -t python_deps`
 
 ReadToMyShoe will now be able to use the `python_deps/bin/trafilatura` binary.
 
@@ -49,9 +48,10 @@ ReadToMyShoe will now be able to use the `python_deps/bin/trafilatura` binary.
 
 ### Other necessary setup
 
-We need a few utilities for building the website. Run the following:
+We need a few utilities for building the website.
 
-* `rustup target add wasm32-unknown-unknown`. This installs the WASM target so Rust knows how to output code for the browser.
+* First, make sure you have rustup installed. Follow the directions [here](https://rustup.rs/). Make sure to add `$HOME/.cargo/bin` to your `PATH`.
+* Run `rustup target add wasm32-unknown-unknown`. This installs the WASM target so Rust knows how to output code for the browser.
 * `cargo install --locked trunk`. The `trunk` utility packages the frontend assets of the website.
 * If you're on an M1 Mac, run  `cargo install --locked wasm-bindgen-cli`. This is because `trunk` doesn't know how to download the bindgen CLI itself ([tracking issue](https://github.com/thedodd/trunk/pull/375)).
 

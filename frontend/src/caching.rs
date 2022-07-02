@@ -25,20 +25,18 @@ const POS_TABLE: &str = "pos";
 /// Registers service_worker.js to do all the caching for this site. See service_worker.js for more
 /// details.
 pub fn register_service_worker() {
+    // We can only register a service worker in a "seucre context", i.e., if the website is running
+    // on localhost or via HTTPS. Check that first and return early if not.
+    let win = gloo_utils::window();
+    if !win.is_secure_context() {
+        return;
+    }
+
     // Get a ServiceWorkerContainer
-    let sw_container = gloo_utils::window().navigator().service_worker();
+    let sw_container = win.navigator().service_worker();
 
     // Just point at the SERVICE_WORKER_PATH and let the JS file handle the rest
     spawn_local(async move {
-        // Wait until the container is ready
-        match sw_container.ready() {
-            Ok(p) => JsFuture::from(p).await.unwrap(),
-            Err(e) => {
-                tracing::error!("Couldn't ready ServiceWorker: {:?}", e);
-                return;
-            }
-        };
-
         // The service worker lives in /assets/, so make sure it has access to the whole site
         let mut reg_options = RegistrationOptions::new();
         reg_options.scope("./");

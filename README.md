@@ -1,8 +1,10 @@
 # ReadToMyShoe
 
-A website that reads articles to you, even when you're offline.
+[**Video Demo**](https://www.dropbox.com/s/7i65qyv2i9uosp5/readtomyshoe_demo.mp4?dl=0)
 
-This is a full stack Rust web app using [axum](https://github.com/tokio-rs/axum) and [yew](https://yew.rs/).
+A website that reads articles to you, even when you're offline. Still in early development.
+
+This is a full-stack Rust webapp, using [axum](https://github.com/tokio-rs/axum) for the backend and [yew](https://yew.rs/) for the frontend.
 
 ## Installation
 
@@ -19,7 +21,7 @@ We use Google Cloud's text to speech engine. Here's how to get an API key:
     * Select "Cloud Text-to-Speech API"
 * Now copy your API key to the clipboard
 
-Once you've got your API key, you need to give it to the readtomyshoe server:
+Once you've got your API key, you need to give it to the ReadToMyShoe server:
 
 * Create a new file in the `server/` directory, called `gcp_api.key`
 * Paste the API key into that file
@@ -35,7 +37,7 @@ You need to have OpenSSL installed on your machine:
 
 ### Python dependencies
 
-We use `trafilatura` for article content extraction. This is installed directly in the local directory. Make sure you have `pip3` installed, then run:
+We use `trafilatura` for article content extraction. This is installed directly in the local directory. Make sure you have `pip3` installed, then run, in `readtomyshoe/`:
 
 ```
 pip3 install trafilatura -t python_deps
@@ -44,8 +46,8 @@ pip3 install trafilatura -t python_deps
 ReadToMyShoe will now be able to use the `python_deps/bin/trafilatura` binary.
 
 **For devs:** If you wanna run `trafilatura` yourself, first `cd python_deps`, then run `PYTHONPATH=. ./bin/trafilatura`
- 
-### Other setup
+
+### Other necessary setup
 
 We need a few utilities for building the website. Run the following:
 
@@ -72,6 +74,14 @@ Run the pre-compiled version with `./scripts/prod.sh`.
 
 The app will start at `https://localhost:8080` by default. **The default behavior is to make the service visible to your whole local network.** To make it only accessible from your own machine, delete `--address 0.0.0.0` from `dev.sh` and/or `prod.sh`.
 
+**NOTE:** If you run ReadToMyShoe on your local network or generally without HTTPS, iOS will NOT cache anything. This is because Service Workers are only allowed in "secure contexts" (meaning via HTTPS or on localhost).
+
+## Deployment
+
+**Docker:** The `Dockerfile` in this directory should Just Work. Run `docker run readtomyshoe -p 8080:8080` to start ReadToMyShoe on port 8080. Currently, this does not support storing audio files on an external volume. This is in the TODOs.
+
+**Fly.io:** We also support one-click deployment on [Fly.io](https://fly.io). To deploy, simply pick a new app name in `fly.toml`, make an app with that name in your Fly.io account, and run `flyctl deploy`. This uses the Dockerfile for deployment, so any changes there will change your Fly.io deployment.
+
 ## TODO
 
 An incomplete to-do list, roughly in order of most important to least important:
@@ -80,6 +90,7 @@ An incomplete to-do list, roughly in order of most important to least important:
 - [ ] Write an accessible progress notifs for adding to queue, and error notifs for fetch and what not
 - [ ] Sort library by date added
 - [ ] Implement "next track" functionality with queue
+- [ ] Make the Dockerfile compatible with external volumes
 - [ ] Handle errors in article fetch better: delete temp files, implement retries to Google TTS
 - [ ] Save more metadata than article title: id, url, title, byline, text. Maybe store in the ID3v2 tags?
 - [ ] Show more detailed progress in the add article view
@@ -88,6 +99,15 @@ An incomplete to-do list, roughly in order of most important to least important:
 - [ ] Fix caching in dev mode (the trouble is that assets are in `/assets/` in prod, but `/` in dev)
 - [ ] Implement login functionality and make per-user libraries
 - [ ] Write rate-limiting code for TTS service
+
+## License
+
+Licensed under either of
+
+ * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+ * MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.
 
 ## Thanks
 

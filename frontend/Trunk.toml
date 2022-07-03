@@ -11,7 +11,7 @@ backend = "http://[::1]:8081/api/"
 # -k means don't delete the original file
 [[hooks]]
 stage = "post_build"
-command = "sh"
+command = "bash"
 command_arguments = [
     "-c",
     """gzip -9 -k $TRUNK_STAGING_DIR/{\

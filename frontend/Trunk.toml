@@ -5,3 +5,19 @@ filehash = false
 
 [[proxy]]
 backend = "http://[::1]:8081/api/"
+
+# gzip the assets
+# -9 means best compression
+# -k means don't delete the original file
+[[hooks]]
+stage = "post_build"
+command = "sh"
+command_arguments = [
+    "-c",
+    """gzip -9 -k $TRUNK_STAGING_DIR/{\
+        index.html,\
+        service-worker.js,\
+        readtomyshoe-frontend.js,\
+        readtomyshoe-frontend_bg.wasm\
+    }"""
+]

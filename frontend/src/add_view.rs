@@ -171,14 +171,14 @@ impl Component for Add {
 
         html! {
             <main>
-                <h2>{ "Add Article" }</h2>
+                <h2>{ "Add article by URL" }</h2>
                 <fieldset title="Add by URL">
                     <label for={URL_FORM_ID}>{ "Article URL:" }</label>
                     <input type="text" id={URL_FORM_ID} required=true />
                     <br />
                     <button onclick={add_url_callback}>{ "Submit" }</button>
                 </fieldset>
-                <p style="font-weight: bold">{ " OR " }</p>
+                <h2>{ "Add article by text" }</h2>
                 <fieldset title="Add by text">
                     <label for={TITLE_FORM_ID}>{ "Article title:" }</label>
                     <input type="text" id={TITLE_FORM_ID} required=true />

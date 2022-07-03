@@ -3,14 +3,15 @@ use crate::{
     queue_view::{CachedArticle, CachedArticleHandle, Queue, QueueMsg},
     WeakComponentLink,
 };
-use common::ArticleList;
+use common::{ArticleMetadata, LibraryCatalog};
 
 use anyhow::{bail, Error as AnyError};
 use gloo_net::http::Request;
+use wasm_bindgen::JsValue;
 use yew::{html::Scope, prelude::*};
 
 /// Fetches the list of articles
-async fn fetch_article_list() -> Result<ArticleList, AnyError> {
+async fn fetch_article_list() -> Result<LibraryCatalog, AnyError> {
     tracing::debug!("Fetching article list");
     let resp = Request::get("/api/list-articles")
         .send()
@@ -35,7 +36,8 @@ async fn fetch_article_list() -> Result<ArticleList, AnyError> {
 /// Fetches a specific article
 pub async fn fetch_article(title: &str) -> Result<CachedArticle, AnyError> {
     // Fetch the audio blobs
-    let encoded_title = urlencoding::encode(title);
+    let filename = format!("{title}.mp3");
+    let encoded_title = urlencoding::encode(&filename);
     let resp = Request::get(&format!("/api/audio-blobs/{encoded_title}"))
         .send()
         .await
@@ -67,17 +69,37 @@ pub async fn fetch_article(title: &str) -> Result<CachedArticle, AnyError> {
 }
 
 /// Renders an item in the library
-fn render_lib_item(title: String, library_link: Scope<Library>) -> Html {
-    //let callback = make_article_fetch_callback(title.clone(), queue_link);
+fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> Html {
+    let title = metadata.title.clone();
     let title_copy = title.clone();
     let callback = library_link.callback(move |_| LibraryMsg::FetchArticle(title_copy.clone()));
+
+    // Format the date the article was added
+    let lang = gloo_utils::window()
+        .navigator()
+        .language()
+        .unwrap_or("en-US".to_string());
+    let date_added: Option<String> = metadata.unix_time_modified.map(|t| {
+        // Convert to a local date string  by making a Date object and giving it the unix time
+        let js_date = js_sys::Date::new_0();
+        // set_time takes number of milliseconds since epoch, so multiply by 1000
+        js_date.set_time((t as f64) * 1000.0);
+        js_date.to_locale_string(&lang, &JsValue::TRUE).into()
+    });
+    let date_added_str = match date_added {
+        Some(d) => format!("Added on {d}"),
+        None => format!("Date added unknown"),
+    };
 
     html! {
         <li>
             <button onclick={callback} class="addToQueue" title="Add to queue">
                 { "+" }
             </button>
-            <p>{title}</p>
+            <div class="articleDetails">
+                <p class="articleTitle">{ title }</p>
+                <p class="dateAdded">{ date_added_str }</p>
+            </div>
         </li>
     }
 }
@@ -85,11 +107,11 @@ fn render_lib_item(title: String, library_link: Scope<Library>) -> Html {
 #[derive(Default)]
 pub(crate) struct Library {
     err: Option<AnyError>,
-    list: Option<ArticleList>,
+    catalog: Option<LibraryCatalog>,
 }
 
 pub(crate) enum LibraryMsg {
-    SetList(ArticleList),
+    SetCatalog(LibraryCatalog),
     SetError(AnyError),
     FetchArticle(String),
     PassArticleToQueue(CachedArticleHandle),
@@ -106,12 +128,12 @@ impl Component for Library {
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            LibraryMsg::SetList(list) => {
+            LibraryMsg::SetCatalog(catalog) => {
                 self.err = None;
-                self.list = Some(list);
+                self.catalog = Some(catalog);
             }
             LibraryMsg::SetError(err) => {
-                self.list = None;
+                self.catalog = None;
                 self.err = Some(err);
             }
             LibraryMsg::FetchArticle(title) => {
@@ -153,7 +175,7 @@ impl Component for Library {
             .callback_future_once(|()| async move {
                 tracing::info!("Calling fetch_article_list");
                 match fetch_article_list().await {
-                    Ok(list) => LibraryMsg::SetList(list),
+                    Ok(list) => LibraryMsg::SetCatalog(list),
                     Err(e) => LibraryMsg::SetError(e.into()),
                 }
             })
@@ -170,12 +192,12 @@ impl Component for Library {
                     { format!("{:?}", err) }
                 </p>
             }
-        } else if let Some(list) = &self.list {
+        } else if let Some(catalog) = &self.catalog {
             // If there's a list, render all the items
-            let rendered_list = list
-                .titles
+            let rendered_list = catalog
+                .0
                 .iter()
-                .map(|title| render_lib_item(title.clone(), ctx.link().clone()))
+                .map(|metadata| render_lib_item(metadata.clone(), ctx.link().clone()))
                 .collect::<Html>();
             html! {
                 <section title="library">

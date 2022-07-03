@@ -28,14 +28,14 @@ impl Component for Main {
 
         html! {
             <main>
-                <h1>{ "🥾ReadToMyShoe" }</h1>
+                <h1>{ "🥾 ReadToMyShoe" }</h1>
                 <h2>{ "Library" }</h2>
-                <a href="/add" style="font-weight: bold">{ "Add Article" }</a>
-                <Library {queue_link} />
+                    <a href="/add" style="font-weight: bold">{ "Add Article" }</a>
+                    <Library {queue_link} />
                 <h2>{ "Queue" }</h2>
-                <Queue {queue_link} {player_link} />
+                    <Queue {queue_link} {player_link} />
                 <h2>{ "Player" }</h2>
-                <Player {player_link} />
+                    <Player {player_link} />
             </main>
         }
     }

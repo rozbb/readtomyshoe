@@ -3,7 +3,7 @@
  */
 
 body {
-    font: 18px/1.62 sans-serif;
+    font: 18px/1.4 sans-serif;
     margin: 1em auto;
     padding: 0 1rem;
     max-width: 40em;
@@ -11,11 +11,14 @@ body {
 
 ul {
     list-style: none;
-    padding-left: 1rem;
+    padding-left: 0.3rem;
 }
 
 li {
-    padding: 0.5rem 0;
+    padding: 0.25rem 0;
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
 }
 
 
@@ -49,21 +52,39 @@ a {
 /*
  * List items should not be blocks
  */
-li>p {
-    display: inline;
+.articleTitle {
+    padding: 0;
+    margin: 0;
 }
 
+.dateAdded {
+    font-style: italic;
+    font-size: 0.8em;
+    margin: 0;
+    padding-left: 1rem;
+}
 
 /*
- * Library and queue buttons should be bold and offset
+ * Library and queue buttons should be big and offset
  */
 li>button {
+    font-size: 1.3rem;
+}
+.addToQueue {
     margin-right: 1rem;
-    font-weight: bold;
+}
+.queueControl {
+    justify-content: space-between;
+}
+.queueControlDelete {
+    margin-left: 1rem;
+}
+.queueControlPlay {
+    margin-right: 1rem;
 }
 
 /*
- * Make the skip buttons big and offset from the audio scrubber
+ * Make the skip buttons big and offset from the audio scrubber and playback speed
  */
 .audiocontrol>button {
     margin-right: 1rem;
@@ -71,6 +92,9 @@ li>button {
 }
 audio {
     margin-bottom: 1rem;
+}
+.playbackSpeedSection {
+    margin-top: 1rem;
 }
 
 /*

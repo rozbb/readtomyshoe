@@ -322,22 +322,21 @@ impl Component for Player {
                 <div class="audiocontrol" title="More playback controls">
                     <button title="Jump backwards 10 seconds" onclick={jump_backward_cb}>{ "↩️" }</button>
                     <button title="Jump forwards 10 seconds" onclick={jump_forward_cb}>{ "↪️" }</button>
-                    <br />
-                    <br />
-
-                    <label for={SPEED_SELECTOR_ID}>{ "Playback Speed:" }</label>
-                    <select title="Playback speed" name={SPEED_SELECTOR_ID} id={SPEED_SELECTOR_ID} onchange={playback_speed_cb}>
-                        <option value="0.5">{ "0.5" }</option>
-                        <option value="0.75">{ "0.75" }</option>
-                        <option value="1" selected=true>{ "1" }</option>
-                        <option value="1.25">{ "1.25" }</option>
-                        <option value="1.5">{ "1.5" }</option>
-                        <option value="1.75">{ "1.75" }</option>
-                        <option value="2">{ "2" }</option>
-                        <option value="2.5">{ "2.5" }</option>
-                        <option value="3">{ "3" }</option>
-                        <option value="4">{ "4" }</option>
-                    </select>
+                    <div class="playbackSpeedSection">
+                        <label for={SPEED_SELECTOR_ID}>{ "Playback Speed:" }</label>
+                        <select title="Playback speed" name={SPEED_SELECTOR_ID} id={SPEED_SELECTOR_ID} onchange={playback_speed_cb}>
+                            <option value="0.5">{ "0.5" }</option>
+                            <option value="0.75">{ "0.75" }</option>
+                            <option value="1" selected=true>{ "1" }</option>
+                            <option value="1.25">{ "1.25" }</option>
+                            <option value="1.5">{ "1.5" }</option>
+                            <option value="1.75">{ "1.75" }</option>
+                            <option value="2">{ "2" }</option>
+                            <option value="2.5">{ "2.5" }</option>
+                            <option value="3">{ "3" }</option>
+                            <option value="4">{ "4" }</option>
+                        </select>
+                    </div>
                 </div>
             </section>
         }

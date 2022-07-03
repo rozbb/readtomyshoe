@@ -1,6 +1,10 @@
-use std::fs;
+use std::{
+    ffi::OsStr,
+    fs,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-use common::ArticleList;
+use common::{ArticleMetadata, LibraryCatalog};
 
 use axum::{extract::Extension, http::StatusCode, routing::get, Json, Router};
 
@@ -17,7 +21,7 @@ pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
 /// Lists the articles in the audio blob directory
 async fn list_articles(
     Extension(audio_blob_dir): Extension<String>,
-) -> Result<Json<ArticleList>, StatusCode> {
+) -> Result<Json<LibraryCatalog>, StatusCode> {
     // Try to open the directory
     let dir: fs::ReadDir = match fs::read_dir(audio_blob_dir) {
         Ok(d) => d,
@@ -27,15 +31,50 @@ async fn list_articles(
         }
     };
 
-    // List the directory
-    let article_list = dir
-        .map(|d| d.map(|r| r.file_name().into_string().unwrap()))
-        .collect::<Result<Vec<String>, std::io::Error>>()
-        .map(ArticleList::new);
+    // List the directory and collect the metadata
+    let metadatas = dir
+        .filter_map(|entry| {
+            // Check for a listing error
+            if let Err(e) = entry {
+                tracing::error!("Could not list file in audio_blobs/: {:?}", e);
+                return None;
+            }
+            let entry = entry.unwrap();
 
-    if let Ok(l) = article_list {
-        Ok(Json(l))
-    } else {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
+            // Don't list non-MP3 values
+            if entry.path().extension() != Some(OsStr::new("mp3")) {
+                return None;
+            }
+            // Get the "file stem", i.e., the filename without hte extension
+            let title = entry
+                .path()
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .map(str::to_string)
+                .unwrap_or("[could not get filename]".to_string());
+
+            // Now get the time the file was last modified
+            let time_modified: Option<SystemTime> =
+                entry.metadata().and_then(|m| m.modified()).ok();
+            // Convert the time to seconds since epoch
+            let unix_time_modified = time_modified
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|dur| dur.as_secs());
+
+            // Return the metadata
+            Some(ArticleMetadata {
+                title,
+                unix_time_modified,
+            })
+        })
+        .collect::<Vec<ArticleMetadata>>();
+    let mut library_catalog = LibraryCatalog(metadatas);
+
+    // Now sort by time modified, most recently modified first
+    library_catalog
+        .0
+        .sort_by_key(|meta| std::cmp::Reverse(meta.unix_time_modified));
+
+    // Done
+    Ok(Json(library_catalog))
 }

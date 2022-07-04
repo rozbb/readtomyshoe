@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/web-manifest-combined.json",
+  "name": "ReadToMyShoe",
+  "short_name": "ReadToMyShoe",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#755640",
+  "description": "A webapp that reads your articles to you while you're on the subway",
+  "icons": [{
+    "src": "icon.png",
+    "sizes": "any",
+    "type": "image/png"
+  }]
+}

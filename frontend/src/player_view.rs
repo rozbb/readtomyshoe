@@ -187,7 +187,6 @@ fn play_article(art: &CachedArticle) {
     metadata.set_title(&art.title);
     let media_session = get_media_session();
     media_session.set_metadata(Some(&metadata));
-    //set_callbacks(&media_session, actions);
 
     // Construct a URL that refers to the blob. This will be the audio player's src attribute
     let blob_url = Url::create_object_url_with_blob(&blob).unwrap();

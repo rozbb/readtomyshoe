@@ -7,7 +7,8 @@ use common::{ArticleMetadata, LibraryCatalog};
 
 use anyhow::{bail, Error as AnyError};
 use gloo_net::http::Request;
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use web_sys::PageTransitionEvent;
 use yew::{html::Scope, prelude::*};
 
 /// Fetches the list of articles
@@ -68,6 +69,14 @@ pub async fn fetch_article(title: &str) -> Result<CachedArticle, AnyError> {
     })
 }
 
+/// Callback for "pageshow" event. Gets triggered whenever this page gets shown due to navigation
+fn pageshow_callback(event: PageTransitionEvent, library_link: Scope<Library>) {
+    // If the page is loading from a cache, force it to reload the library
+    if event.persisted() {
+        library_link.send_message(LibraryMsg::FetchLibrary);
+    }
+}
+
 /// Renders an item in the library
 fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> Html {
     let title = metadata.title.clone();
@@ -108,12 +117,14 @@ fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> H
 pub(crate) struct Library {
     err: Option<AnyError>,
     catalog: Option<LibraryCatalog>,
+    _pageshow_action: Option<Closure<dyn 'static + Fn(PageTransitionEvent)>>,
 }
 
 pub(crate) enum LibraryMsg {
     SetCatalog(LibraryCatalog),
     SetError(AnyError),
     FetchArticle(String),
+    FetchLibrary,
     PassArticleToQueue(CachedArticleHandle),
 }
 
@@ -135,6 +146,14 @@ impl Component for Library {
             LibraryMsg::SetError(err) => {
                 self.catalog = None;
                 self.err = Some(err);
+            }
+            LibraryMsg::FetchLibrary => {
+                ctx.link().send_future(async move {
+                    match fetch_article_list().await {
+                        Ok(list) => LibraryMsg::SetCatalog(list),
+                        Err(e) => LibraryMsg::SetError(e.into()),
+                    }
+                });
             }
             LibraryMsg::FetchArticle(title) => {
                 // Fetch an article, save it, and relay the article handle. If there's an error,
@@ -171,17 +190,24 @@ impl Component for Library {
 
     fn create(ctx: &Context<Self>) -> Self {
         // Kick of a future that will fetch the article list
-        ctx.link()
-            .callback_future_once(|()| async move {
-                tracing::info!("Calling fetch_article_list");
-                match fetch_article_list().await {
-                    Ok(list) => LibraryMsg::SetCatalog(list),
-                    Err(e) => LibraryMsg::SetError(e.into()),
-                }
-            })
-            .emit(());
+        ctx.link().send_future(async move {
+            match fetch_article_list().await {
+                Ok(list) => LibraryMsg::SetCatalog(list),
+                Err(e) => LibraryMsg::SetError(e.into()),
+            }
+        });
 
-        Self::default()
+        // Save the pageshow callback and set it on document.window
+        let link = ctx.link().clone();
+        let pageshow_cb = Closure::new(move |evt| pageshow_callback(evt, link.clone()));
+        gloo_utils::window()
+            .add_event_listener_with_callback("pageshow", pageshow_cb.as_ref().unchecked_ref())
+            .expect("couldn't register pageshow callback");
+
+        Library {
+            _pageshow_action: Some(pageshow_cb),
+            ..Default::default()
+        }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {

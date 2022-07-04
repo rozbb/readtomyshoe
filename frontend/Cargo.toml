@@ -30,7 +30,7 @@ features = [
     "MediaPositionState", "MediaSessionAction", "MediaSessionActionDetails", "MediaMetadata",
     "ServiceWorkerContainer", "RegistrationOptions", "IdbFactory", "IdbOpenDbRequest",
     "IdbDatabase", "IdbObjectStore", "IdbObjectStoreParameters", "IdbTransaction",
-    "IdbTransactionMode", "ReadableStream",
+    "IdbTransactionMode", "ReadableStream", "PageTransitionEvent",
 ]
 
 [dependencies.common]

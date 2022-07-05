@@ -41,6 +41,8 @@ async fn add_article_by_text(
     Json(ArticleTextSubmission { title, body }): Json<ArticleTextSubmission>,
     Extension(audio_blob_dir): Extension<String>,
 ) -> Result<impl IntoResponse, AddArticleError> {
+    tracing::debug!("Adding article '{title}'");
+
     // Open a new MP3 file. Fail if the file already exists
     let savepath = Path::new(&audio_blob_dir)
         .join(&title)

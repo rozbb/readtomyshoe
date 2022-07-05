@@ -83,7 +83,7 @@ impl Component for Queue {
         spawn_local(async move {
             match caching::load_handles().await {
                 Ok(handles) => link.send_message(QueueMsg::LoadFrom(handles)),
-                Err(e) => tracing::error!("{:?}", e),
+                Err(e) => tracing::error!("Couldn't restore queue: {:?}", e),
             }
         });
 

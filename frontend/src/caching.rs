@@ -25,15 +25,17 @@ const POS_TABLE: &str = "pos";
 /// Registers service_worker.js to do all the caching for this site. See service_worker.js for more
 /// details.
 pub fn register_service_worker() {
-    // We can only register a service worker in a "seucre context", i.e., if the website is running
-    // on localhost or via HTTPS. Check that first and return early if not.
-    let win = gloo_utils::window();
-    if !win.is_secure_context() {
+    // Get a ServiceWorkerContainer
+    let sw_container = gloo_utils::window().navigator().service_worker();
+
+    // There's plenty of reasons we can't get a service worker. For one,
+    // we can only register a service worker in a "seucre context", i.e., if the website is running
+    // on localhost or via HTTPS. Also, you can't register a service worker in Firefox in a private
+    // browsing window. So to catch all of these, just return early if we can't get one.
+    if sw_container.is_undefined() {
+        tracing::warn!("Could not register a ServiceWorker. Offline mode is unavailable");
         return;
     }
-
-    // Get a ServiceWorkerContainer
-    let sw_container = win.navigator().service_worker();
 
     // Just point at the SERVICE_WORKER_PATH and let the JS file handle the rest
     spawn_local(async move {
@@ -53,9 +55,16 @@ pub fn register_service_worker() {
     });
 }
 
+fn jsvalue_to_str(v: JsValue) -> String {
+    js_sys::JSON::stringify(&v)
+        .ok()
+        .and_then(|s| s.as_string())
+        .unwrap_or("[JS error not displayable]".to_string())
+}
+
 /// A helper function for methods that return JsValue as an error type
 fn wrap_jserror(context_str: &'static str, v: JsValue) -> AnyError {
-    AnyError::msg(format!("{:?}", v)).context(context_str)
+    AnyError::msg(format!("{}", jsvalue_to_str(v))).context(context_str)
 }
 
 /// Returns a handle to the global IndexedDB object for our app
@@ -107,7 +116,10 @@ pub(crate) async fn get_db() -> Result<IdbDatabase, AnyError> {
             Ok(db)
         },
         e = error_rx.recv() => {
-            bail!("Error opening database {DB_NAME} v{DB_VERSION}: {:?}", e)
+            let e: JsValue = e.map(Into::into).unwrap_or(JsValue::NULL);
+            let event_str = jsvalue_to_str(e);
+            let err_str = format!("Error opening database {DB_NAME} v{DB_VERSION}: {}", event_str);
+            Err(AnyError::msg(err_str))
         }
 
         // Upgradeneeded happens the first time the DB is created. In this case, we need to

@@ -2,7 +2,18 @@ use crate::{library_view::Library, player_view::Player, queue_view::Queue, WeakC
 
 use yew::prelude::*;
 
-pub struct Main;
+pub struct Main {
+    /// Indicates whether the app has access to an IndexedDb. If this is false, it's a fatal error
+    has_db_access: bool,
+}
+
+impl Default for Main {
+    fn default() -> Main {
+        Main {
+            has_db_access: true,
+        }
+    }
+}
 
 #[derive(PartialEq, Properties)]
 pub struct Props {
@@ -10,22 +21,56 @@ pub struct Props {
     pub player_link: WeakComponentLink<Player>,
 }
 
+pub enum Message {
+    /// Message indicates that we don't have access to an IndexedDb. This is a fatal error
+    DbFailed,
+}
+
 impl Component for Main {
-    type Message = ();
+    type Message = Message;
     type Properties = Props;
 
-    fn create(_ctx: &Context<Self>) -> Self {
-        Main
+    fn create(ctx: &Context<Self>) -> Self {
+        // Kick off a future to test whether or not we have IndexedDB access
+        ctx.link().send_future_batch(async move {
+            if crate::caching::get_db().await.is_err() {
+                vec![Message::DbFailed]
+            } else {
+                Vec::new()
+            }
+        });
+
+        Main::default()
     }
 
-    fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {
-        false
+    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            Message::DbFailed => {
+                self.has_db_access = false;
+            }
+        }
+
+        true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let queue_link = &ctx.props().queue_link;
         let player_link = &ctx.props().player_link;
 
+        // If we don't have IndexedDB access, don't show anything
+        if !self.has_db_access {
+            return html! {
+                <main>
+                    <h1>{ "🥾 ReadToMyShoe" }</h1>
+                    <h3 style="color: red">{
+                        "Error: cannot access local storage.
+                        ReadToMyShoe does not work in private browsing mode in Firefox."
+                    }</h3>
+                </main>
+            };
+        }
+
+        // Show the main view
         html! {
             <main>
                 <h1>{ "🥾 ReadToMyShoe" }</h1>

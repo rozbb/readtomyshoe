@@ -197,6 +197,11 @@ fn play_article(art: &CachedArticle) {
 }
 
 fn play_article_handle(handle: &CachedArticleHandle) {
+    // Do a useless pause() action. This necessary because Safari is buggy and doesn't allow the
+    // first media action (like play or pause) to come from inside an async worker
+    pause();
+
+    // Load the article and play it
     let handle = handle.clone();
     spawn_local(async move {
         match caching::load_article(&handle).await {

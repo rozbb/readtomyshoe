@@ -1,6 +1,10 @@
-use crate::{library_view::Library, player_view::Player, queue_view::Queue, WeakComponentLink};
+use crate::{
+    app_view::Route, library_view::Library, player_view::Player, queue_view::Queue,
+    WeakComponentLink,
+};
 
 use yew::prelude::*;
+use yew_router::prelude::*;
 
 pub struct Main {
     /// Indicates whether the app has access to an IndexedDb. If this is false, it's a fatal error
@@ -75,7 +79,7 @@ impl Component for Main {
             <main>
                 <h1>{ "🥾 ReadToMyShoe" }</h1>
                 <h2>{ "Library" }</h2>
-                    <a href="/add" style="font-weight: bold">{ "Add Article" }</a>
+                    <Link<Route> to={Route::Add} classes="navLink">{ "Add Article" }</Link<Route>>
                     <Library {queue_link} />
                 <h2>{ "Queue" }</h2>
                     <Queue {queue_link} {player_link} />

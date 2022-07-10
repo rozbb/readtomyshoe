@@ -26,8 +26,9 @@ label {
     margin-right: 0.5rem;
 }
 
-a {
+.navLink {
     color: blue;
+    font-weight: bold;
 }
 
 /*

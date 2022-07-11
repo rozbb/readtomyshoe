@@ -4,11 +4,16 @@
   "short_name": "ReadToMyShoe",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#755640",
+  "background_color": "#5B6FF5",
   "description": "A webapp that reads your articles to you while you're on the subway",
   "icons": [{
-    "src": "icon.png",
-    "sizes": "any",
+    "src": "rtms-color-180x180.png",
+    "sizes": "180x180",
+    "type": "image/png"
+  },
+  {
+    "src": "rtms-color-512x512.png",
+    "sizes": "512x512",
     "type": "image/png"
   }]
 }

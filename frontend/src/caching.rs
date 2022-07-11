@@ -168,17 +168,14 @@ async fn initialize_db(db: &IdbDatabase) -> Result<(), AnyError> {
 
 /// A helper function that runs whatever you want on the specified table. `write` indicates whether
 /// `table_op` needs write access to the table. `table_op` takes a table and does some operations
-/// that result in an `IdbRequest`. Once that request is compolete, the `post_process` function is
-/// run on the resulting `JsValue`.
-pub(crate) async fn access_db<T, F1, F2>(
+/// that result in an `IdbRequest`. Once that request is finished, returns the resulting `JsValue`.
+pub(crate) async fn access_db<F>(
     table_name: &str,
     write: bool,
-    table_op: F1,
-    post_process: F2,
-) -> Result<T, AnyError>
+    table_op: F,
+) -> Result<JsValue, AnyError>
 where
-    F1: FnOnce(&IdbObjectStore) -> Result<IdbRequest, AnyError>,
-    F2: Fn(JsValue) -> Result<T, AnyError>,
+    F: FnOnce(&IdbObjectStore) -> Result<IdbRequest, AnyError>,
 {
     let transaction_mode = if write {
         IdbTransactionMode::Readwrite
@@ -220,8 +217,7 @@ where
     // Wait for an event to trigger, and cancel the remaining branches
     tokio::select! {
         _ = success_var.notified() => {
-            let res = req.result().map_err(|e| wrap_jserror("DB succeeded but returned error", e))?;
-            post_process(res)
+            req.result().map_err(|e| wrap_jserror("DB succeeded but returned error", e))
         },
         e = error_rx.recv() => {
             bail!("{:?}", e)
@@ -238,14 +234,11 @@ pub(crate) async fn table_put(table_name: &str, val: &JsValue) -> Result<String,
             .map_err(|e| wrap_jserror("couldn't insert value to table", e))
     };
 
-    // Get the key of the article we just pushed
-    let post_process = |val: JsValue| Ok(val.as_string().unwrap());
-
     // Run the operation
-    match access_db(table_name, true, table_op, post_process).await {
+    match access_db(table_name, true, table_op).await {
         Ok(key) => {
             tracing::trace!("Successfully put {:?}", key);
-            Ok(key)
+            Ok(key.as_string().unwrap())
         }
         Err(e) => Err(anyhow!("Error inserting into {}: {}", table_name, e)),
     }
@@ -260,11 +253,8 @@ pub(crate) async fn table_delete(table_name: &str, key: &str) -> Result<(), AnyE
             .map_err(|e| wrap_jserror("couldn't save value to table", e))
     };
 
-    // Nothing to do after deleting
-    let post_process = |_: JsValue| Ok(());
-
     // Run the operation
-    match access_db(table_name, true, table_op, post_process).await {
+    match access_db(table_name, true, table_op).await {
         Ok(_) => {
             tracing::trace!("Successfully deleted {:?}", key);
             Ok(())
@@ -282,11 +272,8 @@ pub(crate) async fn table_get(table_name: &str, key: &str) -> Result<JsValue, An
             .map_err(|e| wrap_jserror("couldn't get from table", e))
     };
 
-    // Get the key of the article we just pushed
-    let post_process = |val: JsValue| Ok(val);
-
     // Run the operation
-    match access_db(table_name, false, table_op, post_process).await {
+    match access_db(table_name, false, table_op).await {
         Ok(val) => {
             tracing::trace!("Successfully got {:?}", val);
             Ok(val)
@@ -304,17 +291,13 @@ pub(crate) async fn table_get_keys(table_name: &str) -> Result<Vec<JsValue>, Any
             .map_err(|e| wrap_jserror("couldn't get all keys from table", e))
     };
 
-    // Get the key of the article we just pushed
-    let post_process = |val: JsValue| {
-        // Cast the result into a Vec of keys
-        Ok(val.dyn_into::<js_sys::Array>().unwrap().to_vec())
-    };
-
     // Run the operation
-    match access_db(table_name, false, table_op, post_process).await {
+    match access_db(table_name, false, table_op).await {
         Ok(val) => {
             tracing::trace!("Successfully got all keys");
-            Ok(val)
+
+            // Cast the result into a Vec of keys
+            Ok(val.dyn_into::<js_sys::Array>().unwrap().to_vec())
         }
         Err(e) => Err(anyhow!("Error getting all keys from {}: {}", table_name, e)),
     }
@@ -376,6 +359,8 @@ pub(crate) async fn delete_article(handle: &CachedArticleHandle) -> Result<(), A
 
 pub(crate) async fn load_handles() -> Result<Vec<CachedArticleHandle>, AnyError> {
     let keys = table_get_keys(ARTICLES_TABLE).await?;
+
+    // Convert the keys into CachedArticleHandles
     Ok(keys
         .into_iter()
         .map(|v: JsValue| CachedArticleHandle(v.as_string().unwrap()))

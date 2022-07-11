@@ -118,3 +118,5 @@ Images are licensed by Michael Rosenberg under the [CC BY 4.0](https://creativec
 ## Thanks
 
 A lot of the ideas and code in this crate started with Robert Krahn's [fantastic template](https://robert.kra.hn/posts/2022-04-03_rust-web-wasm/#making-the-file-server-support-a-spa-app). Thanks
+
+Also, big thanks to my friend Sharon Ye for her immense help in the design of the logo.

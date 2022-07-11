@@ -1,4 +1,6 @@
-# 🥾 ReadToMyShoe
+![ReadToMyShoe logo](logos/rtms-color-3000x3000.png)
+
+# ReadToMyShoe
 
 [**Video Demo**](https://www.dropbox.com/s/7i65qyv2i9uosp5/readtomyshoe_demo.mp4?dl=0)
 
@@ -37,10 +39,11 @@ You need to have OpenSSL installed on your machine:
 
 ### Python dependencies
 
-We use `trafilatura` for article content extraction. This is installed directly in the local directory. 
+We use `trafilatura` for article content extraction. This is installed directly in the local directory.
 
 * Install `pip3`. On a Mac: `brew install python3`. On Ubuntu: `sudo apt-get install python3-pip`.
 * In `readtomyshoe/`, run `pip3 install trafilatura -t python_deps`
+    * In the future, if you want to update `trafilatura`, run `pip3 install --upgrade trafilatura -t python_deps`
 
 ReadToMyShoe will now be able to use the `python_deps/bin/trafilatura` binary.
 
@@ -61,7 +64,7 @@ If you want to work on this repo in an IDE, it will be easiest if you put the fo
 ```
 [build]
 rustflags = ["--cfg=web_sys_unstable_apis"]
-rustdocflags=["--cfg=web_sys_unstable_apis"]
+rustdocflags = ["--cfg=web_sys_unstable_apis"]
 ```
 
 You'll also need to run `cargo install cargo-watch` in order to use `script/dev.sh`. This is a filesystem watcher that tells the server to autoreload whenever a file is changed.
@@ -88,7 +91,6 @@ An incomplete to-do list, roughly in order of most important to least important:
 
 - [ ] Save current article, playback position, and speed
 - [ ] Write an accessible progress notifs for adding to queue, and error notifs for fetch and what not
-- [ ] Sort library by date added
 - [ ] Implement "next track" functionality with queue
 - [ ] Make the Dockerfile compatible with external volumes
 - [ ] Handle errors in article fetch better: delete temp files, implement retries to Google TTS
@@ -100,14 +102,16 @@ An incomplete to-do list, roughly in order of most important to least important:
 - [ ] Implement login functionality and make per-user libraries
 - [ ] Write rate-limiting code for TTS service
 
-## License
+## Licenses
 
-Licensed under either of
+All code is licensed under either of
 
  * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
  * MIT license ([LICENSE-MIT](LICENSE-MIT))
 
 at your option.
+
+Images are licensed by Michael Rosenberg under the [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ## Thanks
 

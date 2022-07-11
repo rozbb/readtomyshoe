@@ -1,4 +1,6 @@
-![ReadToMyShoe logo](logos/rtms-color-512x512.png)
+<p align="center>
+    <img width="300" height="300" src="logos/rtms-color-512x512.png" alt="ReadToMyShoe logo">
+</p>
 
 # ReadToMyShoe
 

@@ -2,13 +2,13 @@ use crate::queue_view::{CachedArticle, CachedArticleHandle};
 
 use std::sync::Arc;
 
-use anyhow::{bail, Error as AnyError};
+use anyhow::{anyhow, bail, Error as AnyError};
 use gloo_utils::window;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{
-    Blob, BlobPropertyBag, Event, IdbDatabase, IdbObjectStoreParameters, IdbTransactionMode,
-    RegistrationOptions,
+    Blob, BlobPropertyBag, Event, IdbDatabase, IdbObjectStore, IdbObjectStoreParameters,
+    IdbRequest, IdbTransactionMode, RegistrationOptions,
 };
 
 // TODO Fixme: This path is only valid in production mode
@@ -166,22 +166,38 @@ async fn initialize_db(db: &IdbDatabase) -> Result<(), AnyError> {
     Ok(())
 }
 
-/// Puts the value in the given table and returns the key to it
-pub(crate) async fn table_put(table_name: &str, val: &JsValue) -> Result<String, AnyError> {
+/// A helper function that runs whatever you want on the specified table. `write` indicates whether
+/// `table_op` needs write access to the table. `table_op` takes a table and does some operations
+/// that result in an `IdbRequest`. Once that request is compolete, the `post_process` function is
+/// run on the resulting `JsValue`.
+pub(crate) async fn access_db<T, F1, F2>(
+    table_name: &str,
+    write: bool,
+    table_op: F1,
+    post_process: F2,
+) -> Result<T, AnyError>
+where
+    F1: FnOnce(&IdbObjectStore) -> Result<IdbRequest, AnyError>,
+    F2: Fn(JsValue) -> Result<T, AnyError>,
+{
+    let transaction_mode = if write {
+        IdbTransactionMode::Readwrite
+    } else {
+        IdbTransactionMode::Readonly
+    };
+
     // Get the articles object store
     let table = get_db()
         .await?
-        .transaction_with_str_and_mode(table_name, IdbTransactionMode::Readwrite)
+        .transaction_with_str_and_mode(table_name, transaction_mode)
         .map_err(|e| wrap_jserror("couldn't start transaction", e))?
         .object_store(table_name)
         .map_err(|e| wrap_jserror("couldn't get object store from transaction", e))?;
 
-    tracing::info!("Got DB handle");
+    tracing::trace!("Got DB handle");
 
-    // Request a put() operation on the table
-    let req = table
-        .put(val)
-        .map_err(|e| wrap_jserror("couldn't save value to table", e))?;
+    // Do the operation on the table
+    let req = table_op(&table)?;
 
     // Now handle the outcomes of the put. Make channels to indicate success or failure
     let success_var = Arc::new(tokio::sync::Notify::new());
@@ -204,179 +220,103 @@ pub(crate) async fn table_put(table_name: &str, val: &JsValue) -> Result<String,
     // Wait for an event to trigger, and cancel the remaining branches
     tokio::select! {
         _ = success_var.notified() => {
-            tracing::info!("Successfully put {:?}", val);
-
-            // Get the key of the article we just pushed
-            let key: String = req
-                .result()
-                .map_err(|e| wrap_jserror("couldn't get key from IdbRequest", e))?
-                .as_string().unwrap();
-            Ok(key)
+            let res = req.result().map_err(|e| wrap_jserror("DB succeeded but returned error", e))?;
+            post_process(res)
         },
         e = error_rx.recv() => {
-            bail!("Error writing to {}: {:?}", table_name, e);
+            bail!("{:?}", e)
         }
+    }
+}
+
+/// Puts the value in the given table and returns the key to it
+pub(crate) async fn table_put(table_name: &str, val: &JsValue) -> Result<String, AnyError> {
+    // Request a delete() operation on the table
+    let table_op = |table: &IdbObjectStore| {
+        table
+            .put(val)
+            .map_err(|e| wrap_jserror("couldn't insert value to table", e))
+    };
+
+    // Get the key of the article we just pushed
+    let post_process = |val: JsValue| Ok(val.as_string().unwrap());
+
+    // Run the operation
+    match access_db(table_name, true, table_op, post_process).await {
+        Ok(key) => {
+            tracing::trace!("Successfully put {:?}", key);
+            Ok(key)
+        }
+        Err(e) => Err(anyhow!("Error inserting into {}: {}", table_name, e)),
     }
 }
 
 /// Puts the value in the given table and returns the key to it
 pub(crate) async fn table_delete(table_name: &str, key: &str) -> Result<(), AnyError> {
-    // Get the articles object store
-    let table = get_db()
-        .await?
-        .transaction_with_str_and_mode(table_name, IdbTransactionMode::Readwrite)
-        .map_err(|e| wrap_jserror("couldn't start transaction", e))?
-        .object_store(table_name)
-        .map_err(|e| wrap_jserror("couldn't get object store from transaction", e))?;
+    // Request a delete() operation on the table
+    let table_op = |table: &IdbObjectStore| {
+        table
+            .delete(&JsValue::from_str(key))
+            .map_err(|e| wrap_jserror("couldn't save value to table", e))
+    };
 
-    tracing::info!("Got DB handle");
+    // Nothing to do after deleting
+    let post_process = |_: JsValue| Ok(());
 
-    // Request a put() operation on the table
-    let req = table
-        .delete(&JsValue::from_str(key))
-        .map_err(|e| wrap_jserror("couldn't save value to table", e))?;
-
-    // Now handle the outcomes of the put. Make channels to indicate success or failure
-    let success_var = Arc::new(tokio::sync::Notify::new());
-    let success_var2 = success_var.clone();
-    let (error_tx, mut error_rx) = tokio::sync::mpsc::channel(1);
-
-    // Set callbacks for the above events. Error has to send the error message over a channel
-    let success_cb: Closure<dyn Fn(Event)> = Closure::new(move |_| success_var2.notify_one());
-    let error_cb: Closure<dyn Fn(Event)> = Closure::new(move |e| {
-        let error_tx2 = error_tx.clone();
-        spawn_local(async move {
-            // Send the error. We unwrap here. Something probably went very wrong if async channels
-            // stop working
-            error_tx2.send(e).await.unwrap();
-        })
-    });
-    req.set_onsuccess(Some(success_cb.as_ref().unchecked_ref()));
-    req.set_onerror(Some(error_cb.as_ref().unchecked_ref()));
-
-    // Wait for an event to trigger, and cancel the remaining branches
-    tokio::select! {
-        _ = success_var.notified() => {
-            tracing::info!("Successfully deleted {:?}", key);
-
-            // Get the key of the article we just pushed
+    // Run the operation
+    match access_db(table_name, true, table_op, post_process).await {
+        Ok(_) => {
+            tracing::trace!("Successfully deleted {:?}", key);
             Ok(())
-        },
-        e = error_rx.recv() => {
-            bail!("Error writing to {}: {:?}", table_name, e);
         }
+        Err(e) => Err(anyhow!("Error deleting from {}: {}", table_name, e)),
     }
 }
 
 /// Gets the value in the given table at the given key
 pub(crate) async fn table_get(table_name: &str, key: &str) -> Result<JsValue, AnyError> {
-    // Get the articles object store
-    let table = get_db()
-        .await?
-        .transaction_with_str_and_mode(table_name, IdbTransactionMode::Readonly)
-        .map_err(|e| wrap_jserror("couldn't start transaction", e))?
-        .object_store(table_name)
-        .map_err(|e| wrap_jserror("couldn't get object store from transaction", e))?;
+    // Request a delete() operation on the table
+    let table_op = |table: &IdbObjectStore| {
+        table
+            .get(&JsValue::from_str(key))
+            .map_err(|e| wrap_jserror("couldn't get from table", e))
+    };
 
-    tracing::info!("Got DB handle");
+    // Get the key of the article we just pushed
+    let post_process = |val: JsValue| Ok(val);
 
-    // Request a put() operation on the table
-    let req = table
-        .get(&JsValue::from_str(key))
-        .map_err(|e| wrap_jserror("couldn't get from table", e))?;
-
-    // Now handle the outcomes of the get. Make channels to indicate success or failure
-    let success_var = Arc::new(tokio::sync::Notify::new());
-    let success_var2 = success_var.clone();
-    let (error_tx, mut error_rx) = tokio::sync::mpsc::channel(1);
-
-    // Set callbacks for the above events. Error has to send the error message over a channel
-    let success_cb: Closure<dyn Fn(Event)> = Closure::new(move |_| success_var2.notify_one());
-    let error_cb: Closure<dyn Fn(Event)> = Closure::new(move |e| {
-        let error_tx2 = error_tx.clone();
-        spawn_local(async move {
-            // Send the error. We unwrap here. Something probably went very wrong if async channels
-            // stop working
-            error_tx2.send(e).await.unwrap();
-        })
-    });
-    req.set_onsuccess(Some(success_cb.as_ref().unchecked_ref()));
-    req.set_onerror(Some(error_cb.as_ref().unchecked_ref()));
-
-    // Wait for an event to trigger, and cancel the remaining branches
-    tokio::select! {
-        _ = success_var.notified() => {
-            tracing::info!("Succesfully got {}", key);
-
-            // Deserialize the get result
-            req
-                .result()
-                //.map_err(|e| wrap_jserror("couldn't get key from IdbRequest", e))?.into_serde()
-                .map_err(|e| wrap_jserror("couldn't get key from IdbRequest", e))
-        },
-        e = error_rx.recv() => {
-            bail!("Error getting {} from {}: {:?}", key, table_name, e);
+    // Run the operation
+    match access_db(table_name, false, table_op, post_process).await {
+        Ok(val) => {
+            tracing::trace!("Successfully got {:?}", val);
+            Ok(val)
         }
+        Err(e) => Err(anyhow!("Error getting {} from {}: {}", key, table_name, e)),
     }
 }
 
 /// Gets all the keys from the given table
-pub(crate) async fn table_get_keys(table_name: &str) -> Result<Vec<CachedArticleHandle>, AnyError> {
-    // Get the articles object store
-    let table = get_db()
-        .await?
-        .transaction_with_str_and_mode(table_name, IdbTransactionMode::Readonly)
-        .map_err(|e| wrap_jserror("couldn't start transaction", e))?
-        .object_store(table_name)
-        .map_err(|e| wrap_jserror("couldn't get object store from transaction", e))?;
+pub(crate) async fn table_get_keys(table_name: &str) -> Result<Vec<JsValue>, AnyError> {
+    // Request a delete() operation on the table
+    let table_op = |table: &IdbObjectStore| {
+        table
+            .get_all_keys()
+            .map_err(|e| wrap_jserror("couldn't get all keys from table", e))
+    };
 
-    tracing::info!("Got DB handle");
+    // Get the key of the article we just pushed
+    let post_process = |val: JsValue| {
+        // Cast the result into a Vec of keys
+        Ok(val.dyn_into::<js_sys::Array>().unwrap().to_vec())
+    };
 
-    // Request a put() operation on the table
-    let req = table
-        .get_all_keys()
-        .map_err(|e| wrap_jserror("couldn't get from table", e))?;
-
-    // Now handle the outcomes of the get. Make channels to indicate success or failure
-    let success_var = Arc::new(tokio::sync::Notify::new());
-    let success_var2 = success_var.clone();
-    let (error_tx, mut error_rx) = tokio::sync::mpsc::channel(1);
-
-    // Set callbacks for the above events. Error has to send the error message over a channel
-    let success_cb: Closure<dyn Fn(Event)> = Closure::new(move |_| success_var2.notify_one());
-    let error_cb: Closure<dyn Fn(Event)> = Closure::new(move |e| {
-        let error_tx2 = error_tx.clone();
-        spawn_local(async move {
-            // Send the error. We unwrap here. Something probably went very wrong if async channels
-            // stop working
-            error_tx2.send(e).await.unwrap();
-        })
-    });
-    req.set_onsuccess(Some(success_cb.as_ref().unchecked_ref()));
-    req.set_onerror(Some(error_cb.as_ref().unchecked_ref()));
-
-    // Wait for an event to trigger, and cancel the remaining branches
-    tokio::select! {
-        _ = success_var.notified() => {
-            tracing::info!("Succesfully got all keys");
-
-            // Deserialize the get result
-            let key_arr = req
-                .result()
-                .map_err(|e| wrap_jserror("couldn't get key from IdbRequest", e))?
-                .dyn_into::<js_sys::Array>()
-                .unwrap();
-
-            let mut keys: Vec<CachedArticleHandle> = Vec::new();
-            key_arr.for_each(&mut |v: JsValue, _, _| {
-                keys.push(CachedArticleHandle(v.as_string().unwrap()));
-            });
-
-            Ok(keys)
-        },
-        e = error_rx.recv() => {
-            bail!("Error getting all keys from {}: {:?}", table_name, e);
+    // Run the operation
+    match access_db(table_name, false, table_op, post_process).await {
+        Ok(val) => {
+            tracing::trace!("Successfully got all keys");
+            Ok(val)
         }
+        Err(e) => Err(anyhow!("Error getting all keys from {}: {}", table_name, e)),
     }
 }
 
@@ -435,5 +375,9 @@ pub(crate) async fn delete_article(handle: &CachedArticleHandle) -> Result<(), A
 }
 
 pub(crate) async fn load_handles() -> Result<Vec<CachedArticleHandle>, AnyError> {
-    table_get_keys(ARTICLES_TABLE).await
+    let keys = table_get_keys(ARTICLES_TABLE).await?;
+    Ok(keys
+        .into_iter()
+        .map(|v: JsValue| CachedArticleHandle(v.as_string().unwrap()))
+        .collect())
 }

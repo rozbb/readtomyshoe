@@ -4,17 +4,21 @@ use crate::{
     WeakComponentLink,
 };
 
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{
     Blob, BlobPropertyBag, HtmlAudioElement, HtmlSelectElement, MediaMetadata, MediaPositionState,
     MediaSession, MediaSessionAction, MediaSessionActionDetails, Url,
 };
-use yew::prelude::*;
+use yew::{html::Scope, prelude::*};
 
 const PLAYER_ID: &str = "player";
 const SPEED_SELECTOR_ID: &str = "speed-selector";
 const AUDIO_MIME_FORMAT: &str = "audio/mp3";
+
+// The number of milliseconds between times saving Player state
+const PLAYER_STATE_SAVE_FREQ: i32 = 10000;
 
 // Always jump by 10sec
 const JUMP_SIZE: f64 = 10.0;
@@ -31,6 +35,18 @@ fn get_audio_elem() -> HtmlAudioElement {
 /// Helper function to retrieve the MediaSession API
 fn get_media_session() -> MediaSession {
     gloo_utils::window().navigator().media_session()
+}
+
+/// Sets the current playback time to the given time
+fn set_current_time(time: f64) {
+    let audio_elem = get_audio_elem();
+    audio_elem.set_current_time(time);
+}
+
+/// Sets the playback speed
+fn set_playback_speed(speed: f64) {
+    let audio_elem = get_audio_elem();
+    audio_elem.set_playback_rate(speed);
 }
 
 /// Jumps forward or backwards by the specified offset
@@ -163,7 +179,7 @@ fn pause() {
     audio_elem.pause().unwrap();
 }
 
-fn play_article(art: &CachedArticle) {
+fn set_audio_source(art: &CachedArticle) {
     // Pause the current
     let audio_elem = get_audio_elem();
     audio_elem.pause().unwrap();
@@ -193,7 +209,25 @@ fn play_article(art: &CachedArticle) {
 
     // Now play the audio
     audio_elem.set_src(&blob_url);
+}
+
+fn play_article(art: &CachedArticle) {
+    set_audio_source(art);
     play();
+}
+
+fn set_audio_source_by_handle(handle: &CachedArticleHandle) {
+    // Load the article and play it
+    let handle = handle.clone();
+    spawn_local(async move {
+        match caching::load_article(&handle).await {
+            Ok(article) => set_audio_source(&article),
+            Err(e) => {
+                tracing::error!("Couldn't load article {}: {:?}", handle.0, e);
+                return;
+            }
+        };
+    })
 }
 
 fn play_article_handle(handle: &CachedArticleHandle) {
@@ -234,6 +268,14 @@ fn update_playback_speed() -> f64 {
     rate
 }
 
+/// Gets the elapsed time and tells the player to save its state (wrt the elapsed time and all the
+/// player's other stored values)
+fn trigger_save(player: &Scope<Player>) {
+    let audio_elem = get_audio_elem();
+    let elapsed = audio_elem.current_time();
+    player.send_message(PlayerMsg::SaveState { elapsed });
+}
+
 #[derive(PartialEq, Properties)]
 pub struct Props {
     /// A link to myself. We have to set this on creation
@@ -241,10 +283,28 @@ pub struct Props {
 }
 
 pub enum PlayerMsg {
+    /// Play the given article
     PlayHandle(CachedArticleHandle),
+
+    /// Jump forward `JUMP_SIZE` seconds
     JumpForward,
+
+    /// Jump backward `JUMP_SIZE` seconds
     JumpBackward,
+
+    /// Triggers the Player to check the playback speed selector and update the playback speed
+    /// accordingly
     UpdatePlaybackSpeed,
+
+    /// Set the current state to the one provided. This is used for loading state from the
+    /// IndexedDB
+    SetState(PlayerState),
+
+    // A message for the PlayerState to save itself. The only value that's stale is the elapsed
+    // time, so that's given to the PlayerState
+    SaveState {
+        elapsed: f64,
+    },
 }
 
 /// These are the callbacks the browser calls when the user performs a MediaSession operation like
@@ -263,7 +323,48 @@ pub struct Player {
     /// These are all the callbacks for MediaSession events like pause or jump forward. These need
     /// to live in the `Player` because otherwise they go out of scope
     _actions: Actions,
+    /// The closure that runs every PLAYER_STATE_SAVE_FREQ seconds saving the player state
+    _trigger_save_cb: Closure<dyn 'static + Fn()>,
+    /// Holds all the serializable state of this player. This will be loaded from the IndexedDB
+    state: PlayerState,
+}
+
+/// Holds what's playing, how long it's been playing, and how fast
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PlayerState {
+    /// Handle of the currently playing article
+    now_playing: Option<CachedArticleHandle>,
+    /// The elapsed time of the current article, in seconds
+    elapsed: Option<f64>,
+    /// The audio playback speed, as a percentage
     playback_speed: f64,
+}
+
+impl Default for PlayerState {
+    fn default() -> PlayerState {
+        PlayerState {
+            now_playing: None,
+            elapsed: None,
+            playback_speed: 1.0,
+        }
+    }
+}
+
+/// Runs the given closure after `secs` seconds
+fn run_after_delay(closure: &Closure<dyn 'static + Fn()>, secs: i32) {
+    let win = gloo_utils::window();
+    let func = closure.as_ref().unchecked_ref();
+    if let Err(e) = win.set_timeout_with_callback_and_timeout_and_arguments_0(func, secs) {
+        tracing::error!("Could not save player state: {:?}", e);
+    }
+}
+
+/// Fetches the last saved player state and sets it as the current state
+async fn build_from_save(player: &Scope<Player>) {
+    if let Ok(state) = caching::get_player_state().await {
+        tracing::info!("successfully restored player from save");
+        player.send_message(PlayerMsg::SetState(state));
+    }
 }
 
 impl Component for Player {
@@ -273,19 +374,58 @@ impl Component for Player {
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             PlayerMsg::PlayHandle(handle) => {
+                // Play the track and save it in now_playing
                 tracing::debug!("Playing track {}", handle.0);
                 play_article_handle(&handle);
+                self.state.now_playing = Some(handle);
+
+                false
             }
-            PlayerMsg::JumpForward => jump_forward(),
-            PlayerMsg::JumpBackward => jump_backward(),
+            PlayerMsg::JumpForward => {
+                jump_forward();
+                false
+            }
+            PlayerMsg::JumpBackward => {
+                jump_backward();
+                false
+            }
             PlayerMsg::UpdatePlaybackSpeed => {
-                // Update the playback speed and
+                // Check the playback speed selector and update the playback speed accordingly.
+                // Also save the speed in the state.
                 let rate = update_playback_speed();
-                self.playback_speed = rate;
+                self.state.playback_speed = rate;
+
+                false
+            }
+            PlayerMsg::SetState(state) => {
+                // Set the state and start playing
+                self.state = state;
+                if let Some(handle) = &self.state.now_playing {
+                    set_audio_source_by_handle(&handle);
+                    set_current_time(self.state.elapsed.unwrap_or(0.0));
+                    set_playback_speed(self.state.playback_speed);
+                }
+
+                // The state was updated. Refresh the player view
+                true
+            }
+            PlayerMsg::SaveState { elapsed } => {
+                // Update the elapsed time and save the state
+                self.state.elapsed = Some(elapsed);
+                let state_copy = self.state.clone();
+                spawn_local(async move {
+                    match caching::save_player_state(&state_copy).await {
+                        Ok(_) => tracing::trace!("Successfully saved player state"),
+                        Err(e) => tracing::error!("Could not save player state: {:?}", e),
+                    }
+                });
+
+                // Now setup the next trigger
+                run_after_delay(&self._trigger_save_cb, PLAYER_STATE_SAVE_FREQ);
+
+                false
             }
         }
-
-        false
     }
 
     fn create(ctx: &Context<Self>) -> Self {
@@ -305,10 +445,23 @@ impl Component for Player {
         };
         set_callbacks(&get_media_session(), &actions);
 
-        // TODO: Load playback speed from cache
+        // Set up the closure that gets called every 10sec and triggers a save event
+        let link = ctx.link().clone();
+        let trigger_save_cb = Closure::new(move || trigger_save(&link));
+
+        // Kick off a future to get the last known player state
+        let link = ctx.link().clone();
+        spawn_local(async move { build_from_save(&link).await });
+
+        // Kick off the state saving loop in PLAYER_STATE_SAVE_FREQ seconds
+        run_after_delay(&trigger_save_cb, PLAYER_STATE_SAVE_FREQ);
+
+        // Return the default values for now. Hopefully they get overwritten by the build_from_save
+        // function
         Self {
             _actions: actions,
-            playback_speed: 1.0,
+            _trigger_save_cb: trigger_save_cb,
+            state: PlayerState::default(),
         }
     }
 
@@ -318,8 +471,16 @@ impl Component for Player {
         let jump_backward_cb = ctx.link().callback(|_| PlayerMsg::JumpBackward);
         let playback_speed_cb = ctx.link().callback(|_| PlayerMsg::UpdatePlaybackSpeed);
 
+        let now_playing_str = self
+            .state
+            .now_playing
+            .as_ref()
+            .map(|c| c.0.clone())
+            .unwrap_or(String::default());
+
         html! {
             <section title="player">
+                <p><b>{ "Now Playing: " }</b> { now_playing_str }</p>
                 <audio controls=true style={ "display: block;" } id={PLAYER_ID}>
                     { "Your browser does not support the <code>audio</code> element" }
                 </audio>
@@ -346,27 +507,3 @@ impl Component for Player {
         }
     }
 }
-
-// Non-<audio> method of playing audio. We don't need this for now
-/*
-async fn play_article(art: &CachedArticle) {
-    let ctx = AudioContext::new().unwrap();
-    let in_buf = ctx.create_buffer_source();
-
-    let decoded_audio: AudioBuffer = {
-        let encoded_bytes = Uint8Array::from(&art.audio_blob);
-        let decoded_promise = ctx.decode_audio_data(u8arr.buffer()).unwrap();
-        JsFuture::from(decoded_promise)
-            .await
-            .unwrap()
-            .dyn_into()
-            .unwrap()
-    };
-
-    // Now set the in buffer to the decoded audio
-    in_buf.set_buffer(Some(&decoded_audio));
-
-    // Start playing
-    in_buf.start();
-}
-*/

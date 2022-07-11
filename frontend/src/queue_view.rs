@@ -29,9 +29,10 @@ pub struct CachedArticle {
 }
 
 /// A handle to retrieve a cached article from storage. This is just the title for now
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct CachedArticleHandle(pub(crate) String);
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct QueuePosition {
     /// Title of article currently playing
     cur_article: CachedArticleHandle,

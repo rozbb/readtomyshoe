@@ -1,4 +1,7 @@
-use crate::queue_view::{CachedArticle, CachedArticleHandle};
+use crate::{
+    player_view::PlayerState,
+    queue_view::{CachedArticle, CachedArticleHandle},
+};
 
 use std::sync::Arc;
 
@@ -19,8 +22,10 @@ const DB_VERSION: u32 = 1;
 
 /// Name for the table that holds article information
 const ARTICLES_TABLE: &str = "articles";
-/// Name for the table that holds current positions in playback as well as ordering
-const POS_TABLE: &str = "pos";
+
+/// Name for the table that holds the current player state, including current article, time
+/// elapsed, and playback speed
+const PLAYER_STATE_TABLE: &str = "player-state";
 
 /// Registers service_worker.js to do all the caching for this site. See service_worker.js for more
 /// details.
@@ -64,7 +69,7 @@ fn jsvalue_to_str(v: JsValue) -> String {
 
 /// A helper function for methods that return JsValue as an error type
 fn wrap_jserror(context_str: &'static str, v: JsValue) -> AnyError {
-    AnyError::msg(format!("{}", jsvalue_to_str(v))).context(context_str)
+    anyhow!("{context_str}: {:?}", v)
 }
 
 /// Returns a handle to the global IndexedDB object for our app
@@ -144,7 +149,7 @@ pub(crate) async fn get_db() -> Result<IdbDatabase, AnyError> {
 ///           the order of the articles in the queue, the current article being played, and the
 ///           current timestamp
 async fn initialize_db(db: &IdbDatabase) -> Result<(), AnyError> {
-    tracing::info!("Initializing DB");
+    tracing::trace!("Initializing DB");
 
     // The articles table is keyed by title
     let mut articles_params = IdbObjectStoreParameters::new();
@@ -160,7 +165,7 @@ async fn initialize_db(db: &IdbDatabase) -> Result<(), AnyError> {
     // schema update.
     db.create_object_store_with_optional_parameters(ARTICLES_TABLE, &articles_params)
         .map_err(|e| wrap_jserror("couldn't make articles table", e))?;
-    db.create_object_store_with_optional_parameters(POS_TABLE, &pos_params)
+    db.create_object_store_with_optional_parameters(PLAYER_STATE_TABLE, &pos_params)
         .map_err(|e| wrap_jserror("couldn't make pos table", e))?;
 
     Ok(())
@@ -227,7 +232,7 @@ where
 
 /// Puts the value in the given table and returns the key to it
 pub(crate) async fn table_put(table_name: &str, val: &JsValue) -> Result<String, AnyError> {
-    // Request a delete() operation on the table
+    // Request a put() operation on the table
     let table_op = |table: &IdbObjectStore| {
         table
             .put(val)
@@ -240,6 +245,26 @@ pub(crate) async fn table_put(table_name: &str, val: &JsValue) -> Result<String,
             tracing::trace!("Successfully put {:?}", key);
             Ok(key.as_string().unwrap())
         }
+        Err(e) => Err(anyhow!("Error inserting into {}: {}", table_name, e)),
+    }
+}
+
+/// Puts the value in the given table at the given key
+pub(crate) async fn table_put_with_key(
+    table_name: &str,
+    key: &JsValue,
+    val: &JsValue,
+) -> Result<(), AnyError> {
+    // Request a put_with_key() operation on the table
+    let table_op = |table: &IdbObjectStore| {
+        table
+            .put_with_key(val, key)
+            .map_err(|e| wrap_jserror("couldn't insert value to table", e))
+    };
+
+    // Run the operation
+    match access_db(table_name, true, table_op).await {
+        Ok(_) => Ok(()),
         Err(e) => Err(anyhow!("Error inserting into {}: {}", table_name, e)),
     }
 }
@@ -264,11 +289,11 @@ pub(crate) async fn table_delete(table_name: &str, key: &str) -> Result<(), AnyE
 }
 
 /// Gets the value in the given table at the given key
-pub(crate) async fn table_get(table_name: &str, key: &str) -> Result<JsValue, AnyError> {
+pub(crate) async fn table_get(table_name: &str, key: &JsValue) -> Result<JsValue, AnyError> {
     // Request a delete() operation on the table
     let table_op = |table: &IdbObjectStore| {
         table
-            .get(&JsValue::from_str(key))
+            .get(key)
             .map_err(|e| wrap_jserror("couldn't get from table", e))
     };
 
@@ -278,7 +303,12 @@ pub(crate) async fn table_get(table_name: &str, key: &str) -> Result<JsValue, An
             tracing::trace!("Successfully got {:?}", val);
             Ok(val)
         }
-        Err(e) => Err(anyhow!("Error getting {} from {}: {}", key, table_name, e)),
+        Err(e) => Err(anyhow!(
+            "Error getting {:?} from {}: {}",
+            key,
+            table_name,
+            e
+        )),
     }
 }
 
@@ -305,9 +335,8 @@ pub(crate) async fn table_get_keys(table_name: &str) -> Result<Vec<JsValue>, Any
 
 /// Saves the given article to IndexedDB
 pub(crate) async fn save_article(article: &CachedArticle) -> Result<CachedArticleHandle, AnyError> {
-    // Request a put() operation on the table
-    //let serialized_article = JsValue::from_serde(&article)?;
-
+    // Serialize the article manually. We do this instead of using serde because storing blobs is
+    // way faster than storing arrays of integers, which is what serde does.
     let serialized_article = js_sys::Object::new();
     // Set the title
     js_sys::Reflect::set(
@@ -338,7 +367,7 @@ pub(crate) async fn save_article(article: &CachedArticle) -> Result<CachedArticl
 
 pub(crate) async fn load_article(handle: &CachedArticleHandle) -> Result<CachedArticle, AnyError> {
     // Request a get() operation on the table
-    let serialized_article = table_get(ARTICLES_TABLE, &handle.0).await?;
+    let serialized_article = table_get(ARTICLES_TABLE, &JsValue::from_str(&handle.0)).await?;
     let title = js_sys::Reflect::get(&serialized_article, &JsValue::from_str("title"))
         .unwrap()
         .as_string()
@@ -365,4 +394,23 @@ pub(crate) async fn load_handles() -> Result<Vec<CachedArticleHandle>, AnyError>
         .into_iter()
         .map(|v: JsValue| CachedArticleHandle(v.as_string().unwrap()))
         .collect())
+}
+
+/// The player state table only holds one value, and that's the current player's state
+const PLAYER_STATE_GLOBAL_KEY: f64 = 0.0;
+
+/// Saves the player state to IndexedDB
+pub(crate) async fn save_player_state(pos: &PlayerState) -> Result<(), AnyError> {
+    let serialized_pos = JsValue::from_serde(&pos)?;
+    let key = JsValue::from_f64(PLAYER_STATE_GLOBAL_KEY);
+    table_put_with_key(PLAYER_STATE_TABLE, &key, &serialized_pos).await?;
+    Ok(())
+}
+
+/// Gets the player state from th IndexedDB
+pub(crate) async fn get_player_state() -> Result<PlayerState, AnyError> {
+    let key = JsValue::from_f64(PLAYER_STATE_GLOBAL_KEY);
+    table_get(PLAYER_STATE_TABLE, &key)
+        .await
+        .and_then(|v| JsValue::into_serde(&v).map_err(Into::into))
 }

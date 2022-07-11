@@ -1,4 +1,4 @@
-![ReadToMyShoe logo](logos/rtms-color-3000x3000.png)
+![ReadToMyShoe logo](logos/rtms-color-512x512.png)
 
 # ReadToMyShoe
 

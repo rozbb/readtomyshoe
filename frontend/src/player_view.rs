@@ -37,18 +37,6 @@ fn get_media_session() -> MediaSession {
     gloo_utils::window().navigator().media_session()
 }
 
-/// Sets the current playback time to the given time
-fn set_current_time(time: f64) {
-    let audio_elem = get_audio_elem();
-    audio_elem.set_current_time(time);
-}
-
-/// Sets the playback speed
-fn set_playback_speed(speed: f64) {
-    let audio_elem = get_audio_elem();
-    audio_elem.set_playback_rate(speed);
-}
-
 /// Jumps forward or backwards by the specified offset
 fn jump_offset(audio_elem: &HtmlAudioElement, offset: f64) {
     // New time must be in the range [0, duration]
@@ -135,7 +123,7 @@ fn jump_backward() {
     update_playback_state();
 }
 
-fn set_callbacks(media_session: &MediaSession, actions: &Actions) {
+fn set_mediasession_callbacks(media_session: &MediaSession, actions: &Actions) {
     // Helper function for annoying conversion from Closure to Function
     fn action_to_func_ref<T: ?Sized>(action: &Option<Closure<T>>) -> &js_sys::Function {
         action.as_ref().unwrap().as_ref().unchecked_ref()
@@ -163,11 +151,27 @@ fn set_callbacks(media_session: &MediaSession, actions: &Actions) {
     );
 }
 
-fn play() {
+// A helper function that plays empty audio. This is necessary because of a quirk in Safari that
+// doesn't let async functions be the first thing to call play()
+fn fake_play() {
     let audio_elem = get_audio_elem();
     spawn_local(async move {
+        // Set the source to nothing, so nothing actually gets played
+        audio_elem.set_src("");
+
+        // Now play and ignore the error. We don't care
+        let promise = audio_elem.play().unwrap();
+        let _ = JsFuture::from(promise).await;
+    });
+}
+
+fn play() {
+    spawn_local(async move {
+        let audio_elem = get_audio_elem();
+        tracing::debug!("Playing audio");
         let promise = audio_elem.play().unwrap();
         let res = JsFuture::from(promise).await;
+        tracing::debug!("Played audio");
         if let Err(e) = res {
             tracing::error!("Error playing track: {:?}", e);
         }
@@ -207,37 +211,43 @@ fn set_audio_source(art: &CachedArticle) {
     // Construct a URL that refers to the blob. This will be the audio player's src attribute
     let blob_url = Url::create_object_url_with_blob(&blob).unwrap();
 
-    // Now play the audio
+    // Set the src
     audio_elem.set_src(&blob_url);
 }
 
 fn play_article(art: &CachedArticle) {
+    tracing::debug!("setting audio source");
     set_audio_source(art);
+    tracing::debug!("set audio source");
     play();
 }
 
-fn set_audio_source_by_handle(handle: &CachedArticleHandle) {
-    // Load the article and play it
+/// Sets the audio element state from the given player state
+fn set_audio_source_handle(handle: &CachedArticleHandle) {
     let handle = handle.clone();
+    // Load the article, set the elapsed time, and set the playback rate
     spawn_local(async move {
+        // Set the audio source
         match caching::load_article(&handle).await {
             Ok(article) => set_audio_source(&article),
             Err(e) => {
                 tracing::error!("Couldn't load article {}: {:?}", handle.0, e);
                 return;
             }
-        };
-    })
+        }
+    });
 }
 
 fn play_article_handle(handle: &CachedArticleHandle) {
-    // Do a useless pause() action. This necessary because Safari is buggy and doesn't allow the
+    // Do a useless play() action. This necessary because Safari is buggy and doesn't allow the
     // first media action (like play or pause) to come from inside an async worker
-    pause();
+    fake_play();
+    tracing::debug!("did a fake play");
 
     // Load the article and play it
     let handle = handle.clone();
     spawn_local(async move {
+        tracing::debug!("loading article");
         match caching::load_article(&handle).await {
             Ok(article) => play_article(&article),
             Err(e) => {
@@ -296,15 +306,18 @@ pub enum PlayerMsg {
     /// accordingly
     UpdatePlaybackSpeed,
 
-    /// Set the current state to the one provided. This is used for loading state from the
+    /// Set the current player state to the one provided. This is used for loading state from the
     /// IndexedDB
     SetState(PlayerState),
 
-    // A message for the PlayerState to save itself. The only value that's stale is the elapsed
-    // time, so that's given to the PlayerState
-    SaveState {
-        elapsed: f64,
-    },
+    /// A message letting the player know it's safe to set the current time and playback rate of
+    /// the <audio> element. This is necessary because Safari will break playback if you set these
+    /// values too soon.
+    SetHtmlAudioProps,
+
+    /// A message for the PlayerState to save itself. The only value that's stale is the elapsed
+    /// time, so that's given to the PlayerState
+    SaveState { elapsed: f64 },
 }
 
 /// These are the callbacks the browser calls when the user performs a MediaSession operation like
@@ -325,6 +338,10 @@ pub struct Player {
     _actions: Actions,
     /// The closure that runs every PLAYER_STATE_SAVE_FREQ seconds saving the player state
     _trigger_save_cb: Closure<dyn 'static + Fn()>,
+    /// The closure that runs whenever the <audio> element has loaded its source
+    _canplay_cb: Closure<dyn 'static + Fn()>,
+    /// Holds whether the <audio> element's "canplay" event listener has already been set
+    canplay_listener_set: bool,
     /// Holds all the serializable state of this player. This will be loaded from the IndexedDB
     state: PlayerState,
 }
@@ -372,14 +389,18 @@ impl Component for Player {
     type Properties = Props;
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+        let audio_elem = get_audio_elem();
+
         match msg {
             PlayerMsg::PlayHandle(handle) => {
                 // Play the track and save it in now_playing
                 tracing::debug!("Playing track {}", handle.0);
                 play_article_handle(&handle);
+                tracing::debug!("Done playing track");
                 self.state.now_playing = Some(handle);
 
-                false
+                // The state was updated. Refresh the player view
+                true
             }
             PlayerMsg::JumpForward => {
                 jump_forward();
@@ -398,16 +419,38 @@ impl Component for Player {
                 false
             }
             PlayerMsg::SetState(state) => {
-                // Set the state and start playing
+                // If the canplay listener isn't set, set it now
+                if !self.canplay_listener_set {
+                    let func = self._canplay_cb.as_ref().unchecked_ref();
+                    if let Err(e) = audio_elem.add_event_listener_with_callback("canplay", &func) {
+                        tracing::error!("Could not set canplay callback: {:?}", e);
+                    }
+                    tracing::debug!("Set canplay callback");
+                    self.canplay_listener_set = true;
+                }
+
+                // Set the state and make it reflected in the player
                 self.state = state;
-                if let Some(handle) = &self.state.now_playing {
-                    set_audio_source_by_handle(&handle);
-                    set_current_time(self.state.elapsed.unwrap_or(0.0));
-                    set_playback_speed(self.state.playback_speed);
+                if let Some(handle) = self.state.now_playing.as_ref() {
+                    set_audio_source_handle(handle);
                 }
 
                 // The state was updated. Refresh the player view
                 true
+            }
+
+            PlayerMsg::SetHtmlAudioProps => {
+                // We have to remove the event listener here. If we don't, then `set_current_time`
+                // will trigger `canplay`, and we'll be doing this in a loop forever
+                let func = self._canplay_cb.as_ref().unchecked_ref();
+                if let Err(e) = audio_elem.remove_event_listener_with_callback("canplay", &func) {
+                    tracing::error!("Could not remove canplay callback: {:?}", e);
+                }
+                // Set the current time and playback rate
+                audio_elem.set_current_time(self.state.elapsed.unwrap_or(0.0));
+                audio_elem.set_playback_rate(self.state.playback_speed);
+
+                false
             }
             PlayerMsg::SaveState { elapsed } => {
                 // Update the elapsed time and save the state
@@ -443,11 +486,15 @@ impl Component for Player {
             jump_backward_action: Some(Closure::new(jump_backward)),
             seek_to_action: Some(Closure::new(seek_to)),
         };
-        set_callbacks(&get_media_session(), &actions);
+        set_mediasession_callbacks(&get_media_session(), &actions);
 
         // Set up the closure that gets called every 10sec and triggers a save event
         let link = ctx.link().clone();
         let trigger_save_cb = Closure::new(move || trigger_save(&link));
+
+        // Register the closure that runs whenever the audio's source is loaded
+        let link = ctx.link().clone();
+        let canplay_cb = Closure::new(move || link.send_message(PlayerMsg::SetHtmlAudioProps));
 
         // Kick off a future to get the last known player state
         let link = ctx.link().clone();
@@ -461,6 +508,8 @@ impl Component for Player {
         Self {
             _actions: actions,
             _trigger_save_cb: trigger_save_cb,
+            _canplay_cb: canplay_cb,
+            canplay_listener_set: false,
             state: PlayerState::default(),
         }
     }

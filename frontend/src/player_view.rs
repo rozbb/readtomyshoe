@@ -1,6 +1,6 @@
 use crate::{
     caching,
-    queue_view::{CachedArticle, CachedArticleHandle},
+    queue_view::{ArticleId, CachedArticle},
     WeakComponentLink,
 };
 
@@ -223,7 +223,7 @@ fn play_article(art: &CachedArticle) {
 }
 
 /// Sets the audio element state from the given player state
-fn set_audio_source_handle(handle: &CachedArticleHandle) {
+fn set_audio_source_handle(handle: &ArticleId) {
     let handle = handle.clone();
     // Load the article, set the elapsed time, and set the playback rate
     spawn_local(async move {
@@ -238,7 +238,7 @@ fn set_audio_source_handle(handle: &CachedArticleHandle) {
     });
 }
 
-fn play_article_handle(handle: &CachedArticleHandle) {
+fn play_article_handle(handle: &ArticleId) {
     // Do a useless play() action. This necessary because Safari is buggy and doesn't allow the
     // first media action (like play or pause) to come from inside an async worker
     fake_play();
@@ -294,7 +294,7 @@ pub struct Props {
 
 pub enum PlayerMsg {
     /// Play the given article
-    PlayHandle(CachedArticleHandle),
+    Play(ArticleId),
 
     /// Jump forward `JUMP_SIZE` seconds
     JumpForward,
@@ -350,7 +350,7 @@ pub struct Player {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PlayerState {
     /// Handle of the currently playing article
-    now_playing: Option<CachedArticleHandle>,
+    now_playing: Option<ArticleId>,
     /// The elapsed time of the current article, in seconds
     elapsed: Option<f64>,
     /// The audio playback speed, as a percentage
@@ -392,7 +392,7 @@ impl Component for Player {
         let audio_elem = get_audio_elem();
 
         match msg {
-            PlayerMsg::PlayHandle(handle) => {
+            PlayerMsg::Play(handle) => {
                 // Play the track and save it in now_playing
                 tracing::debug!("Playing track {}", handle.0);
                 play_article_handle(&handle);

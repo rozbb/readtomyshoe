@@ -1,6 +1,6 @@
 use crate::{
     caching,
-    queue_view::{CachedArticle, CachedArticleHandle, Queue, QueueMsg},
+    queue_view::{ArticleId, CachedArticle, Queue, QueueEntry, QueueMsg},
     WeakComponentLink,
 };
 use common::{ArticleMetadata, LibraryCatalog};
@@ -65,6 +65,7 @@ pub async fn fetch_article(title: &str) -> Result<CachedArticle, AnyError> {
     // Return the article
     Ok(CachedArticle {
         title: title.to_string(),
+        id: ArticleId(title.to_string()),
         audio_blob,
     })
 }
@@ -125,7 +126,7 @@ pub(crate) enum LibraryMsg {
     SetError(AnyError),
     FetchArticle(String),
     FetchLibrary,
-    PassArticleToQueue(CachedArticleHandle),
+    PassArticleToQueue(QueueEntry),
 }
 
 #[derive(PartialEq, Properties)]
@@ -165,23 +166,23 @@ impl Component for Library {
                             Err(e) => return LibraryMsg::SetError(e),
                         };
 
-                        let handle = match caching::save_article(&article).await {
+                        let queue_entry = match caching::save_article(&article).await {
                             Ok(h) => h,
                             Err(e) => return LibraryMsg::SetError(e),
                         };
 
-                        LibraryMsg::PassArticleToQueue(handle)
+                        LibraryMsg::PassArticleToQueue(queue_entry)
                     })
                     .emit(());
             }
-            LibraryMsg::PassArticleToQueue(handle) => {
+            LibraryMsg::PassArticleToQueue(queue_entry) => {
                 // If we saved an article, pass the notif to the queue
                 ctx.props()
                     .queue_link
                     .borrow()
                     .clone()
                     .unwrap()
-                    .send_message(QueueMsg::AddHandle(handle));
+                    .send_message(QueueMsg::Add(queue_entry));
             }
         }
 

@@ -1,6 +1,6 @@
 use crate::{
     player_view::PlayerState,
-    queue_view::{CachedArticle, CachedArticleHandle},
+    queue_view::{ArticleId, CachedArticle, QueueEntry},
 };
 
 use std::sync::Arc;
@@ -23,8 +23,8 @@ const DB_VERSION: u32 = 1;
 /// Name for the table that holds article information
 const ARTICLES_TABLE: &str = "articles";
 
-/// Name for the table that holds the current player state, including current article, time
-/// elapsed, and playback speed
+/// Name for the table that holds the current player state, including the currently playing
+/// article, and playback speed
 const PLAYER_STATE_TABLE: &str = "player-state";
 
 /// Registers service_worker.js to do all the caching for this site. See service_worker.js for more
@@ -151,11 +151,11 @@ pub(crate) async fn get_db() -> Result<IdbDatabase, AnyError> {
 async fn initialize_db(db: &IdbDatabase) -> Result<(), AnyError> {
     tracing::trace!("Initializing DB");
 
-    // The articles table is keyed by title
+    // The articles table is keyed by ID
     let mut articles_params = IdbObjectStoreParameters::new();
     articles_params
         .auto_increment(false)
-        .key_path(Some(&JsValue::from_str("title")));
+        .key_path(Some(&JsValue::from_str("id")));
 
     // The global position object will always reside at key 0
     let mut pos_params = IdbObjectStoreParameters::new();
@@ -333,16 +333,16 @@ pub(crate) async fn table_get_keys(table_name: &str) -> Result<Vec<JsValue>, Any
     }
 }
 
-/// Saves the given article to IndexedDB
-pub(crate) async fn save_article(article: &CachedArticle) -> Result<CachedArticleHandle, AnyError> {
+/// Saves the given article to IndexedDB, and returns its title and ID
+pub(crate) async fn save_article(article: &CachedArticle) -> Result<QueueEntry, AnyError> {
     // Serialize the article manually. We do this instead of using serde because storing blobs is
     // way faster than storing arrays of integers, which is what serde does.
     let serialized_article = js_sys::Object::new();
-    // Set the title
+    // Set the handle
     js_sys::Reflect::set(
         &serialized_article,
-        &JsValue::from_str("title"),
-        &JsValue::from_str(&article.title),
+        &JsValue::from_str("id"),
+        &JsValue::from_str(&article.id.0),
     )
     .unwrap();
 
@@ -360,15 +360,17 @@ pub(crate) async fn save_article(article: &CachedArticle) -> Result<CachedArticl
     };
     js_sys::Reflect::set(&serialized_article, &JsValue::from_str("audio_blob"), &blob).unwrap();
 
-    table_put(ARTICLES_TABLE, &serialized_article)
-        .await
-        .map(CachedArticleHandle)
+    // Insert the article
+    table_put(ARTICLES_TABLE, &serialized_article).await?;
+
+    // Return the article's title and ID
+    Ok(article.into())
 }
 
-pub(crate) async fn load_article(handle: &CachedArticleHandle) -> Result<CachedArticle, AnyError> {
+pub(crate) async fn load_article(id: &ArticleId) -> Result<CachedArticle, AnyError> {
     // Request a get() operation on the table
-    let serialized_article = table_get(ARTICLES_TABLE, &JsValue::from_str(&handle.0)).await?;
-    let title = js_sys::Reflect::get(&serialized_article, &JsValue::from_str("title"))
+    let serialized_article = table_get(ARTICLES_TABLE, &JsValue::from_str(&id.0)).await?;
+    let id = js_sys::Reflect::get(&serialized_article, &JsValue::from_str("id"))
         .unwrap()
         .as_string()
         .unwrap();
@@ -379,20 +381,29 @@ pub(crate) async fn load_article(handle: &CachedArticleHandle) -> Result<CachedA
     let array_buf = JsFuture::from(js_blob.array_buffer()).await.unwrap();
     let audio_blob = js_sys::Uint8Array::new(&array_buf).to_vec();
 
-    Ok(CachedArticle { title, audio_blob })
+    Ok(CachedArticle {
+        id: ArticleId(id.clone()),
+        title: id,
+        audio_blob,
+    })
 }
 
-pub(crate) async fn delete_article(handle: &CachedArticleHandle) -> Result<(), AnyError> {
-    table_delete(ARTICLES_TABLE, &handle.0).await
+pub(crate) async fn delete_article(id: &ArticleId) -> Result<(), AnyError> {
+    table_delete(ARTICLES_TABLE, &id.0).await
 }
 
-pub(crate) async fn load_handles() -> Result<Vec<CachedArticleHandle>, AnyError> {
+/// Loads the title and ID of every saved article
+pub(crate) async fn load_queue_entries() -> Result<Vec<QueueEntry>, AnyError> {
     let keys = table_get_keys(ARTICLES_TABLE).await?;
 
-    // Convert the keys into CachedArticleHandles
+    // Convert the table entires into queue entries
     Ok(keys
         .into_iter()
-        .map(|v: JsValue| CachedArticleHandle(v.as_string().unwrap()))
+        .map(|v: JsValue| {
+            let title = v.as_string().unwrap();
+            let id = ArticleId(title.clone());
+            QueueEntry { title, id }
+        })
         .collect())
 }
 

@@ -16,33 +16,50 @@ pub struct Props {
     pub player_link: WeakComponentLink<Player>,
 }
 
+/// An entry in the queue has the title and ID of the article
+pub struct QueueEntry {
+    pub(crate) id: ArticleId,
+    pub(crate) title: String,
+}
+
 pub enum QueueMsg {
-    AddHandle(CachedArticleHandle),
+    Add(QueueEntry),
     Delete(usize),
-    LoadFrom(Vec<CachedArticleHandle>),
+    LoadFrom(Vec<QueueEntry>),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct CachedArticle {
     pub title: String,
+    // TODO: Make id unique. Currently it's just a copy of the title
+    pub id: ArticleId,
     pub audio_blob: Vec<u8>,
+}
+
+impl From<&CachedArticle> for QueueEntry {
+    fn from(article: &CachedArticle) -> QueueEntry {
+        QueueEntry {
+            title: article.title.clone(),
+            id: article.id.clone(),
+        }
+    }
 }
 
 /// A handle to retrieve a cached article from storage. This is just the title for now
 #[derive(Clone, Serialize, Deserialize)]
-pub struct CachedArticleHandle(pub(crate) String);
+pub struct ArticleId(pub(crate) String);
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct QueuePosition {
     /// Title of article currently playing
-    cur_article: CachedArticleHandle,
+    cur_article: ArticleId,
     /// Current timestamp in the playback
     cur_timestamp: f64,
 }
 
 #[derive(Default)]
 pub struct Queue {
-    article_handles: Vec<CachedArticleHandle>,
+    entries: Vec<QueueEntry>,
     cur_pos: Option<QueuePosition>,
 }
 
@@ -53,19 +70,19 @@ impl Component for Queue {
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             QueueMsg::Delete(idx) => {
-                // Remove the handle from the queue and delete it from the cache
-                let handle = self.article_handles.remove(idx);
+                // Remove the entry from the queue and delete the article from the cache
+                let entry = self.entries.remove(idx);
                 spawn_local(async move {
                     // Try deleting
-                    match caching::delete_article(&handle).await {
+                    match caching::delete_article(&entry.id).await {
                         Err(e) => tracing::error!("{:?}", e),
                         _ => (),
                     }
                 });
             }
-            QueueMsg::AddHandle(handle) => self.article_handles.push(handle),
-            QueueMsg::LoadFrom(handles) => {
-                self.article_handles = handles;
+            QueueMsg::Add(entry) => self.entries.push(entry),
+            QueueMsg::LoadFrom(entries) => {
+                self.entries = entries;
             }
         }
 
@@ -82,8 +99,8 @@ impl Component for Queue {
         // Try to get the cached queue from the IndexedDB
         let link = ctx.link().clone();
         spawn_local(async move {
-            match caching::load_handles().await {
-                Ok(handles) => link.send_message(QueueMsg::LoadFrom(handles)),
+            match caching::load_queue_entries().await {
+                Ok(entries) => link.send_message(QueueMsg::LoadFrom(entries)),
                 Err(e) => tracing::error!("Couldn't restore queue: {:?}", e),
             }
         });
@@ -96,10 +113,10 @@ impl Component for Queue {
         let queue_link = &ctx.props().queue_link;
 
         let rendered_list = self
-            .article_handles
+            .entries
             .iter()
             .enumerate()
-            .map(|(i, handle)| render_queue_item(handle, i, player_link, queue_link))
+            .map(|(i, entry)| render_queue_item(entry, i, player_link, queue_link))
             .collect::<Html>();
         html! {
             <section title="queue">
@@ -112,23 +129,23 @@ impl Component for Queue {
 }
 
 fn render_queue_item(
-    handle: &CachedArticleHandle,
+    entry: &QueueEntry,
     pos: usize,
     player_link: &WeakComponentLink<Player>,
     queue_link: &WeakComponentLink<Queue>,
 ) -> Html {
     let player_scope = player_link.borrow().clone().unwrap();
     let queue_scope = queue_link.borrow().clone().unwrap();
-    let handle_copy = handle.clone();
+    let id = entry.id.clone();
 
     let play_callback = Callback::from(move |_| {
-        player_scope.send_message(PlayerMsg::PlayHandle(handle_copy.clone()));
+        player_scope.send_message(PlayerMsg::Play(id.clone()));
     });
     let remove_callback = queue_scope.callback(move |_| QueueMsg::Delete(pos));
     html! {
         <li class="queueControl">
             <button class="queueControlPlay" title="Play" onclick={play_callback}>{ "▶️" }</button>
-            <p class="articleTitle"> {&handle.0} </p>
+            <p class="articleTitle"> {&entry.title} </p>
             <button class="queueControlDelete" title="Delete from queue" onclick={remove_callback}>{ "🗑" }</button>
         </li>
     }

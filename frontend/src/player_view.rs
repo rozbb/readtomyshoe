@@ -428,16 +428,23 @@ impl Component for Player {
             PlayerMsg::StopIfPlaying(id) => {
                 // Check if the given ID matches the currently playing article
                 if self.state.now_playing == Some(id) {
-                    // On match, stop playing, clear the player state, and save the state
-                    pause();
+                    // On match, stop playing and clear the <audio> element of all information
+                    let audio_elem = get_audio_elem();
+                    let _ = audio_elem.pause();
+                    audio_elem.set_current_time(0.0);
+                    audio_elem.set_src("");
+
+                    // Now clear the player state, and save the state
                     self.state = PlayerState::default();
                     // This is an ad-hoc (ie non-periodic) save
                     let periodic = false;
                     trigger_save(periodic, &ctx.link());
-                }
 
-                // The state was updated. Refresh the player view
-                true
+                    // The state was updated. Refresh the player view
+                    true
+                } else {
+                    false
+                }
             }
 
             PlayerMsg::SetState(state) => {

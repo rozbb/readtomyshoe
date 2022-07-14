@@ -229,7 +229,7 @@ async fn prepare_for_play(id: &ArticleId) {
     }
 
     // Load the article state and set the elapsed time
-    match caching::get_article_state(&id).await {
+    match caching::load_article_state(&id).await {
         Ok(state) => {
             let audio_elem = get_audio_elem();
             audio_elem.set_current_time(state.elapsed);
@@ -368,7 +368,7 @@ fn run_after_delay(closure: &Closure<dyn 'static + Fn()>, secs: i32) {
 
 /// Fetches the last saved player state and sets it as the current state
 async fn build_from_save(player: &Scope<Player>) {
-    if let Ok(state) = caching::get_player_state().await {
+    if let Ok(state) = caching::load_player_state().await {
         tracing::info!("successfully restored player from save");
         player.send_message(PlayerMsg::SetState(state));
     }

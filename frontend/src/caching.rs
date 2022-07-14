@@ -411,11 +411,15 @@ pub(crate) async fn save_article_state(state: &ArticleState) -> Result<(), AnyEr
 }
 
 /// Gets the player state from th IndexedDB
-pub(crate) async fn get_article_state(id: &ArticleId) -> Result<ArticleState, AnyError> {
+pub(crate) async fn load_article_state(id: &ArticleId) -> Result<ArticleState, AnyError> {
     let key = JsValue::from_str(&id.0);
     table_get(ARTICLE_STATE_TABLE, &key)
         .await
         .and_then(|v| JsValue::into_serde(&v).map_err(Into::into))
+}
+
+pub(crate) async fn delete_article_state(id: &ArticleId) -> Result<(), AnyError> {
+    table_delete(ARTICLE_STATE_TABLE, &id.0).await
 }
 
 /// Loads the title and ID of every saved article
@@ -445,7 +449,7 @@ pub(crate) async fn save_player_state(pos: &PlayerState) -> Result<(), AnyError>
 }
 
 /// Gets the player state from th IndexedDB
-pub(crate) async fn get_player_state() -> Result<PlayerState, AnyError> {
+pub(crate) async fn load_player_state() -> Result<PlayerState, AnyError> {
     let key = JsValue::from_f64(PLAYER_STATE_GLOBAL_KEY);
     table_get(PLAYER_STATE_TABLE, &key)
         .await

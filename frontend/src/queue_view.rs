@@ -80,10 +80,25 @@ impl Component for Queue {
                     .unwrap()
                     .send_message(PlayerMsg::StopIfPlaying(entry.id.clone()));
 
-                // Try deleting from cache
+                // Delete the article from storage
                 spawn_local(async move {
+                    // Delete the article itself
                     match caching::delete_article(&entry.id).await {
-                        Err(e) => tracing::error!("Couldn't delete {}: {:?}", &entry.id.0, e),
+                        Err(e) => {
+                            tracing::error!("Couldn't delete article {}: {:?}", &entry.id.0, e)
+                        }
+                        _ => (),
+                    }
+
+                    // Delete the reader's position in the article
+                    match caching::delete_article_state(&entry.id).await {
+                        Err(e) => {
+                            tracing::error!(
+                                "Couldn't delete state of article {}: {:?}",
+                                &entry.id.0,
+                                e
+                            )
+                        }
                         _ => (),
                     }
                 });

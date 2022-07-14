@@ -276,11 +276,12 @@ fn update_playback_speed() -> f64 {
 }
 
 /// Gets the elapsed time (the only potentially stale value) and tells the player to save the
-/// global state
-fn trigger_save(player: &Scope<Player>) {
+/// global state. `periodic` tells the function whether this was called by a timer or by a user
+/// action. This is passed on to the player later.
+fn trigger_save(periodic: bool, player: &Scope<Player>) {
     let audio_elem = get_audio_elem();
     let elapsed = audio_elem.current_time();
-    player.send_message(PlayerMsg::SaveState { elapsed });
+    player.send_message(PlayerMsg::SaveState { elapsed, periodic });
 }
 
 #[derive(PartialEq, Properties)]
@@ -313,7 +314,13 @@ pub enum PlayerMsg {
 
     /// A message for the PlayerState to save itself. The only value that's stale is the elapsed
     /// time, so that's given to the PlayerState
-    SaveState { elapsed: f64 },
+    SaveState {
+        /// The current article's elapsed time
+        elapsed: f64,
+        /// Whether this save stems from a periodic save or an ad-hoc save. This determines whether
+        /// or not we reset the timer
+        periodic: bool,
+    },
 }
 
 /// These are the callbacks the browser calls when the user performs a MediaSession operation like
@@ -395,8 +402,9 @@ impl Component for Player {
                 tracing::debug!("Done playing track");
                 self.state.now_playing = Some(handle);
 
-                // Save the state to disk
-                trigger_save(&ctx.link());
+                // Save the state to disk. This is an ad-hoc (ie non-periodic) save
+                let periodic = false;
+                trigger_save(periodic, &ctx.link());
 
                 // The state was updated. Refresh the player view
                 true
@@ -427,7 +435,9 @@ impl Component for Player {
                     // On match, stop playing, clear the player state, and save the state
                     pause();
                     self.state = PlayerState::default();
-                    trigger_save(&ctx.link());
+                    // This is an ad-hoc (ie non-periodic) save
+                    let periodic = false;
+                    trigger_save(periodic, &ctx.link());
                 }
 
                 // The state was updated. Refresh the player view
@@ -445,7 +455,7 @@ impl Component for Player {
                 true
             }
 
-            PlayerMsg::SaveState { elapsed } => {
+            PlayerMsg::SaveState { elapsed, periodic } => {
                 // Collect the states to save. Player state holds now-playing and playback speed.
                 // Article state holds elapsed time
                 let player_state = self.state.clone();
@@ -472,8 +482,10 @@ impl Component for Player {
                     }
                 });
 
-                // Now setup the next trigger
-                run_after_delay(&self._trigger_save_cb, PLAYER_STATE_SAVE_FREQ);
+                // If this was a periodic save, set up the next trigger
+                if periodic {
+                    run_after_delay(&self._trigger_save_cb, PLAYER_STATE_SAVE_FREQ);
+                }
 
                 false
             }
@@ -499,7 +511,8 @@ impl Component for Player {
 
         // Set up the closure that gets called every 10sec and triggers a save event
         let link = ctx.link().clone();
-        let trigger_save_cb = Closure::new(move || trigger_save(&link));
+        let periodic = true;
+        let trigger_save_cb = Closure::new(move || trigger_save(periodic, &link));
 
         // Kick off a future to get the last known player state
         let link = ctx.link().clone();

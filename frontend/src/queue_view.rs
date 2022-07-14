@@ -60,7 +60,6 @@ pub struct QueuePosition {
 #[derive(Default)]
 pub struct Queue {
     entries: Vec<QueueEntry>,
-    cur_pos: Option<QueuePosition>,
 }
 
 impl Component for Queue {

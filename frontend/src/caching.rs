@@ -1,5 +1,5 @@
 use crate::{
-    player_view::PlayerState,
+    player_view::{ArticleState, PlayerState},
     queue_view::{ArticleId, CachedArticle, QueueEntry},
 };
 
@@ -22,6 +22,9 @@ const DB_VERSION: u32 = 1;
 
 /// Name for the table that holds article information
 const ARTICLES_TABLE: &str = "articles";
+
+/// Name for the table that holds the current playback position for every article in ARTICLES_TABLE
+const ARTICLE_STATE_TABLE: &str = "article-states";
 
 /// Name for the table that holds the current player state, including the currently playing
 /// article, and playback speed
@@ -157,6 +160,12 @@ async fn initialize_db(db: &IdbDatabase) -> Result<(), AnyError> {
         .auto_increment(false)
         .key_path(Some(&JsValue::from_str("id")));
 
+    // The article-states table is keyed by ID
+    let mut article_states_params = IdbObjectStoreParameters::new();
+    article_states_params
+        .auto_increment(false)
+        .key_path(Some(&JsValue::from_str("id")));
+
     // The global position object will always reside at key 0
     let mut pos_params = IdbObjectStoreParameters::new();
     pos_params.auto_increment(false).key_path(None);
@@ -165,6 +174,8 @@ async fn initialize_db(db: &IdbDatabase) -> Result<(), AnyError> {
     // schema update.
     db.create_object_store_with_optional_parameters(ARTICLES_TABLE, &articles_params)
         .map_err(|e| wrap_jserror("couldn't make articles table", e))?;
+    db.create_object_store_with_optional_parameters(ARTICLE_STATE_TABLE, &articles_params)
+        .map_err(|e| wrap_jserror("couldn't make article states table", e))?;
     db.create_object_store_with_optional_parameters(PLAYER_STATE_TABLE, &pos_params)
         .map_err(|e| wrap_jserror("couldn't make pos table", e))?;
 
@@ -390,6 +401,21 @@ pub(crate) async fn load_article(id: &ArticleId) -> Result<CachedArticle, AnyErr
 
 pub(crate) async fn delete_article(id: &ArticleId) -> Result<(), AnyError> {
     table_delete(ARTICLES_TABLE, &id.0).await
+}
+
+/// Saves the article state to IndexedDB
+pub(crate) async fn save_article_state(state: &ArticleState) -> Result<(), AnyError> {
+    let serialized_state = JsValue::from_serde(&state)?;
+    table_put(ARTICLE_STATE_TABLE, &serialized_state).await?;
+    Ok(())
+}
+
+/// Gets the player state from th IndexedDB
+pub(crate) async fn get_article_state(id: &ArticleId) -> Result<ArticleState, AnyError> {
+    let key = JsValue::from_str(&id.0);
+    table_get(ARTICLE_STATE_TABLE, &key)
+        .await
+        .and_then(|v| JsValue::into_serde(&v).map_err(Into::into))
 }
 
 /// Loads the title and ID of every saved article

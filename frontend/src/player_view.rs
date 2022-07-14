@@ -240,21 +240,6 @@ async fn prepare_for_play(id: &ArticleId) {
     }
 }
 
-/// Loads the article's contents and metadata and plays it
-fn play_article(id: &ArticleId) {
-    let id = id.clone();
-
-    spawn_local(async move {
-        // Do a useless play() action. This necessary because Safari is buggy and doesn't allow the
-        // first media action (like play or pause) to come from inside an async worker
-        fake_play().await;
-        tracing::debug!("did a fake play");
-
-        prepare_for_play(&id).await;
-        play().await;
-    });
-}
-
 /// Fetches the selected playback speed, updates the audio element accordingly, and returns the
 /// selected speed
 fn update_playback_speed() -> f64 {
@@ -395,16 +380,27 @@ impl Component for Player {
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            PlayerMsg::Play(handle) => {
-                // Play the track and save it in now_playing
-                tracing::debug!("Playing track {}", handle.0);
-                play_article(&handle);
-                tracing::debug!("Done playing track");
-                self.state.now_playing = Some(handle);
+            PlayerMsg::Play(id) => {
+                // Set the state to the given ID
+                self.state.now_playing = Some(id.clone());
+                let link = ctx.link().clone();
 
-                // Save the state to disk. This is an ad-hoc (ie non-periodic) save
-                let periodic = false;
-                trigger_save(periodic, &ctx.link());
+                // Load the track, play it, and save the player state to disk
+                tracing::debug!("Playing track {}", id.0);
+                spawn_local(async move {
+                    // Do a useless play() action. This necessary because Safari is buggy and doesn't allow the
+                    // first media action (like play or pause) to come from inside an async worker
+                    fake_play().await;
+                    tracing::trace!("Did a fake play");
+
+                    // Load the article and play it
+                    prepare_for_play(&id).await;
+                    play().await;
+
+                    // Save the state to disk. This is an ad-hoc (ie non-periodic) save
+                    let periodic = false;
+                    trigger_save(periodic, &link);
+                });
 
                 // The state was updated. Refresh the player view
                 true

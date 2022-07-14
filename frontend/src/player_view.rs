@@ -23,6 +23,9 @@ const PLAYER_STATE_SAVE_FREQ: i32 = 10000;
 // Always jump by 10sec
 const JUMP_SIZE: f64 = 10.0;
 
+/// All the playback speeds we support
+const PLAYBACK_SPEEDS: &[f64] = &[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0];
+
 /// Helper function to retrieve the MediaSession API
 fn get_media_session() -> MediaSession {
     gloo_utils::window().navigator().media_session()
@@ -78,7 +81,7 @@ fn jump_offset(audio_elem: &HtmlAudioElement, offset: f64) {
 }
 
 /// Updates the MediaSession's scrubber to the current elapsed track time
-fn update_playback_state() {
+fn update_mediasession_state() {
     let audio_elem = get_audio_elem();
 
     // Get the current position, duration, and playback rate from the <audio> element
@@ -143,7 +146,7 @@ fn jump_forward() {
     tracing::debug!("Jumping forward",);
     let audio_elem = get_audio_elem();
     jump_offset(&audio_elem, JUMP_SIZE);
-    update_playback_state();
+    update_mediasession_state();
 }
 
 /// Jumps backward by JUMP_SIZE seconds
@@ -151,7 +154,7 @@ fn jump_backward() {
     tracing::debug!("Jumping backward",);
     let audio_elem = get_audio_elem();
     jump_offset(&audio_elem, -JUMP_SIZE);
-    update_playback_state();
+    update_mediasession_state();
 }
 
 // A helper function that plays empty audio. This is necessary because of a quirk in Safari that
@@ -240,24 +243,35 @@ async fn prepare_for_play(id: &ArticleId) {
     }
 }
 
-/// Fetches the selected playback speed, updates the audio element accordingly, and returns the
-/// selected speed
-fn update_playback_speed() -> f64 {
-    // Get the selected playback rate. If it's not a number, treat it as 1x speed
-    let speed_selector: HtmlSelectElement = gloo_utils::document()
+/// Returns the combobox used to select playback speed
+fn get_speed_selector() -> HtmlSelectElement {
+    gloo_utils::document()
         .get_element_by_id(SPEED_SELECTOR_ID)
         .unwrap()
         .dyn_into()
-        .unwrap();
-    let rate: f64 = speed_selector.value().parse().unwrap_or(1.0);
+        .unwrap()
+}
 
-    // Set the playback rate and update the MediaSession
+/// Fetches the playback speed selected in the combobox. Returns 1 if invalid.
+fn get_selected_playback_speed() -> f64 {
+    let speed_selector = get_speed_selector();
+    speed_selector.value().parse().unwrap_or(1.0)
+}
+
+/// Sets the playback speed of the <audio> tag and updates the speed selection combobox
+fn set_playback_speed(speed: f64) {
+    // Set the playback rate in the <audio> element
     let audio_elem = get_audio_elem();
-    audio_elem.set_playback_rate(rate);
-    audio_elem.set_default_playback_rate(rate);
-    update_playback_state();
+    audio_elem.set_playback_rate(speed);
+    audio_elem.set_default_playback_rate(speed);
 
-    rate
+    // If this playback speed appears in the playback speed selector, make it appear selected
+    if PLAYBACK_SPEEDS.iter().position(|&s| s == speed).is_some() {
+        let speed_selector = get_speed_selector();
+        speed_selector.set_value(&format!("{}", speed));
+    }
+
+    update_mediasession_state();
 }
 
 /// Gets the elapsed time (the only potentially stale value) and tells the player to save the
@@ -267,6 +281,10 @@ fn trigger_save(periodic: bool, player: &Scope<Player>) {
     let audio_elem = get_audio_elem();
     let elapsed = audio_elem.current_time();
     player.send_message(PlayerMsg::SaveState { elapsed, periodic });
+
+    // Update the MediaSession state while we're here. This should lessen discontinuities due to
+    // difference in true playback speed and displayed playback speed.
+    update_mediasession_state();
 }
 
 #[derive(PartialEq, Properties)]
@@ -381,9 +399,10 @@ impl Component for Player {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             PlayerMsg::Play(id) => {
-                // Set the state to the given ID
-                self.state.now_playing = Some(id.clone());
                 let link = ctx.link().clone();
+
+                // Change now-playing to the new article
+                self.state.now_playing = Some(id.clone());
 
                 // Load the track, play it, and save the player state to disk
                 tracing::debug!("Playing track {}", id.0);
@@ -419,8 +438,13 @@ impl Component for Player {
             PlayerMsg::UpdatePlaybackSpeed => {
                 // Check the playback speed selector and update the playback speed accordingly.
                 // Also save the speed in the state.
-                let rate = update_playback_speed();
+                let rate = get_selected_playback_speed();
+                set_playback_speed(rate);
                 self.state.playback_speed = rate;
+
+                // Save state to disk, since it changed. This is an ad-hoc (ie non-periodic) save
+                let periodic = false;
+                trigger_save(periodic, &ctx.link());
 
                 false
             }
@@ -448,8 +472,10 @@ impl Component for Player {
             }
 
             PlayerMsg::SetState(state) => {
-                // Set the state and make it reflected in the player
+                // Set the state and make it reflected in the player. That is, set the playback
+                // speed and the currently playing article
                 self.state = state;
+                set_playback_speed(self.state.playback_speed);
                 if let Some(handle) = self.state.now_playing.clone() {
                     spawn_local(async move { prepare_for_play(&handle).await });
                 }
@@ -469,10 +495,12 @@ impl Component for Player {
 
                 // Save the states
                 spawn_local(async move {
+                    // Save the player state first
                     match caching::save_player_state(&player_state).await {
                         Ok(_) => tracing::trace!("Successfully saved player state"),
                         Err(e) => tracing::error!("Could not save player state: {:?}", e),
                     }
+
                     // Try to save the article state. There may well be nothing playing. In which
                     // case, do nothing.
                     if let Some(s) = article_state {
@@ -539,6 +567,7 @@ impl Component for Player {
         let jump_backward_cb = ctx.link().callback(|_| PlayerMsg::JumpBackward);
         let playback_speed_cb = ctx.link().callback(|_| PlayerMsg::UpdatePlaybackSpeed);
 
+        let playback_speed_selector = render_playback_speed_selector(playback_speed_cb);
         let now_playing_str = self
             .state
             .now_playing
@@ -557,21 +586,33 @@ impl Component for Player {
                     <button title="Jump forwards 10 seconds" onclick={jump_forward_cb}>{ "↪️" }</button>
                     <div class="playbackSpeedSection">
                         <label for={SPEED_SELECTOR_ID}>{ "Playback Speed:" }</label>
-                        <select title="Playback speed" name={SPEED_SELECTOR_ID} id={SPEED_SELECTOR_ID} onchange={playback_speed_cb}>
-                            <option value="0.5">{ "0.5" }</option>
-                            <option value="0.75">{ "0.75" }</option>
-                            <option value="1" selected=true>{ "1" }</option>
-                            <option value="1.25">{ "1.25" }</option>
-                            <option value="1.5">{ "1.5" }</option>
-                            <option value="1.75">{ "1.75" }</option>
-                            <option value="2">{ "2" }</option>
-                            <option value="2.5">{ "2.5" }</option>
-                            <option value="3">{ "3" }</option>
-                            <option value="4">{ "4" }</option>
-                        </select>
+                        { playback_speed_selector }
                     </div>
                 </div>
             </section>
         }
+    }
+}
+
+/// Renders the playback speed selector, using the given callback for onchange events
+fn render_playback_speed_selector(onchange: Callback<Event>) -> Html {
+    // Construct all the <option> values
+    let options: Html = PLAYBACK_SPEEDS
+        .iter()
+        .map(|speed| {
+            let speed_str = format!("{}", speed);
+            // Make the option. The 1.0 speed is selected by default.
+            html! {
+                <option value={ speed_str.clone() } selected={*speed == 1.0}>
+                    { speed_str }
+                </option>
+            }
+        })
+        .collect();
+
+    html! {
+        <select title="Playback speed" name={SPEED_SELECTOR_ID} id={SPEED_SELECTOR_ID} onchange={onchange}>
+            { options }
+        </select>
     }
 }

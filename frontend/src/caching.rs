@@ -382,7 +382,7 @@ pub(crate) async fn load_article(id: &ArticleId) -> Result<CachedArticle, AnyErr
     // Request a get() operation on the table
     let serialized_article = table_get(ARTICLES_TABLE, &JsValue::from_str(&id.0)).await?;
     let id = js_sys::Reflect::get(&serialized_article, &JsValue::from_str("id"))
-        .unwrap()
+        .map_err(|e| wrap_jserror("couldn't get article id field", e))?
         .as_string()
         .unwrap();
     let js_blob: Blob = js_sys::Reflect::get(&serialized_article, &JsValue::from_str("audio_blob"))

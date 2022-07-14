@@ -23,6 +23,42 @@ const PLAYER_STATE_SAVE_FREQ: i32 = 10000;
 // Always jump by 10sec
 const JUMP_SIZE: f64 = 10.0;
 
+/// Helper function to retrieve the MediaSession API
+fn get_media_session() -> MediaSession {
+    gloo_utils::window().navigator().media_session()
+}
+
+/// Sets all the callbacks necessary for the MediaSession to be usable. On an iPhone, this will
+/// cause the following controls to be displayed on the lockscreen: play/pause, jump back, jump
+/// forward, scrobble.
+fn set_mediasession_callbacks(media_session: &MediaSession, actions: &Actions) {
+    // Helper function for annoying conversion from Closure to Function
+    fn action_to_func_ref<T: ?Sized>(action: &Option<Closure<T>>) -> &js_sys::Function {
+        action.as_ref().unwrap().as_ref().unchecked_ref()
+    }
+
+    media_session.set_action_handler(
+        MediaSessionAction::Play,
+        Some(action_to_func_ref(&actions.play_action)),
+    );
+    media_session.set_action_handler(
+        MediaSessionAction::Pause,
+        Some(action_to_func_ref(&actions.pause_action)),
+    );
+    media_session.set_action_handler(
+        MediaSessionAction::Seekforward,
+        Some(action_to_func_ref(&actions.jump_forward_action)),
+    );
+    media_session.set_action_handler(
+        MediaSessionAction::Seekbackward,
+        Some(action_to_func_ref(&actions.jump_backward_action)),
+    );
+    media_session.set_action_handler(
+        MediaSessionAction::Seekto,
+        Some(action_to_func_ref(&actions.seek_to_action)),
+    );
+}
+
 /// Helper function to retrieve the only audio element from the page
 fn get_audio_elem() -> HtmlAudioElement {
     gloo_utils::document()
@@ -30,11 +66,6 @@ fn get_audio_elem() -> HtmlAudioElement {
         .unwrap()
         .dyn_into()
         .unwrap()
-}
-
-/// Helper function to retrieve the MediaSession API
-fn get_media_session() -> MediaSession {
-    gloo_utils::window().navigator().media_session()
 }
 
 /// Jumps forward or backwards by the specified offset
@@ -123,37 +154,9 @@ fn jump_backward() {
     update_playback_state();
 }
 
-fn set_mediasession_callbacks(media_session: &MediaSession, actions: &Actions) {
-    // Helper function for annoying conversion from Closure to Function
-    fn action_to_func_ref<T: ?Sized>(action: &Option<Closure<T>>) -> &js_sys::Function {
-        action.as_ref().unwrap().as_ref().unchecked_ref()
-    }
-
-    media_session.set_action_handler(
-        MediaSessionAction::Play,
-        Some(action_to_func_ref(&actions.play_action)),
-    );
-    media_session.set_action_handler(
-        MediaSessionAction::Pause,
-        Some(action_to_func_ref(&actions.pause_action)),
-    );
-    media_session.set_action_handler(
-        MediaSessionAction::Seekforward,
-        Some(action_to_func_ref(&actions.jump_forward_action)),
-    );
-    media_session.set_action_handler(
-        MediaSessionAction::Seekbackward,
-        Some(action_to_func_ref(&actions.jump_backward_action)),
-    );
-    media_session.set_action_handler(
-        MediaSessionAction::Seekto,
-        Some(action_to_func_ref(&actions.seek_to_action)),
-    );
-}
-
 // A helper function that plays empty audio. This is necessary because of a quirk in Safari that
 // doesn't let async functions be the first thing to call play()
-async fn afake_play() {
+async fn fake_play() {
     let audio_elem = get_audio_elem();
     // Set the source to nothing, so nothing actually gets played
     audio_elem.set_src("");
@@ -163,34 +166,33 @@ async fn afake_play() {
     let _ = JsFuture::from(promise).await;
 }
 
-async fn aplay() {
+/// Runs play() on the <audio> element in this page
+async fn play() {
     let audio_elem = get_audio_elem();
-    tracing::debug!("Playing audio");
+    tracing::trace!("Playing audio");
     let promise = audio_elem.play().unwrap();
     let res = JsFuture::from(promise).await;
-    tracing::debug!("Played audio");
+    tracing::trace!("Played audio");
     if let Err(e) = res {
         tracing::error!("Error playing track: {:?}", e);
     }
 }
 
-fn schedule_play() {
-    spawn_local(async move { aplay().await });
-}
-
+/// Runs pause() on the <audio> element in this page
 fn pause() {
     let audio_elem = get_audio_elem();
     audio_elem.pause().unwrap();
 }
 
-fn set_audio_source(art: &CachedArticle) {
+/// Sets the <audio>'s src to the given article's MP3 blob
+fn set_audio_source(article: &CachedArticle) {
     // Pause the current
     let audio_elem = get_audio_elem();
     audio_elem.pause().unwrap();
 
     // Make a blob from the MP3 bytes
     let blob = {
-        let bytes = js_sys::Uint8Array::from(art.audio_blob.as_slice());
+        let bytes = js_sys::Uint8Array::from(article.audio_blob.as_slice());
 
         // A blob is made from an array of arrays. So construct [bytes] and use that.
         let parts = js_sys::Array::new();
@@ -204,7 +206,7 @@ fn set_audio_source(art: &CachedArticle) {
 
     // Initialize the MediaSession with metadata and callbacks
     let metadata = MediaMetadata::new().unwrap();
-    metadata.set_title(&art.title);
+    metadata.set_title(&article.title);
     let media_session = get_media_session();
     media_session.set_metadata(Some(&metadata));
 
@@ -215,7 +217,7 @@ fn set_audio_source(art: &CachedArticle) {
     audio_elem.set_src(&blob_url);
 }
 
-/// Loads the given article and its playback state, and prepares it to be played
+/// Loads the given article and its playback state, and sets the <audio>'s src to the MP3 blob
 async fn prepare_for_play(id: &ArticleId) {
     // Load the article and set the <audio> src to it
     match caching::load_article(&id).await {
@@ -238,17 +240,18 @@ async fn prepare_for_play(id: &ArticleId) {
     }
 }
 
+/// Loads the article's contents and metadata and plays it
 fn play_article(id: &ArticleId) {
     let id = id.clone();
 
     spawn_local(async move {
         // Do a useless play() action. This necessary because Safari is buggy and doesn't allow the
         // first media action (like play or pause) to come from inside an async worker
-        afake_play().await;
+        fake_play().await;
         tracing::debug!("did a fake play");
 
         prepare_for_play(&id).await;
-        aplay().await;
+        play().await;
     });
 }
 
@@ -296,6 +299,10 @@ pub enum PlayerMsg {
     /// Jump backward `JUMP_SIZE` seconds
     JumpBackward,
 
+    /// Stops playback if a particular ID is playing. This is so that removing a playing item from
+    /// the queue stops the current playback
+    StopIfPlaying(ArticleId),
+
     /// Triggers the Player to check the playback speed selector and update the playback speed
     /// accordingly
     UpdatePlaybackSpeed,
@@ -336,8 +343,6 @@ pub struct Player {
 pub struct PlayerState {
     /// Handle of the currently playing article
     now_playing: Option<ArticleId>,
-    /// The elapsed time of the current article, in seconds
-    elapsed: Option<f64>,
     /// The audio playback speed, as a percentage
     playback_speed: f64,
 }
@@ -355,7 +360,6 @@ impl Default for PlayerState {
     fn default() -> PlayerState {
         PlayerState {
             now_playing: None,
-            elapsed: None,
             playback_speed: 1.0,
         }
     }
@@ -382,7 +386,7 @@ impl Component for Player {
     type Message = PlayerMsg;
     type Properties = Props;
 
-    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             PlayerMsg::Play(handle) => {
                 // Play the track and save it in now_playing
@@ -391,17 +395,23 @@ impl Component for Player {
                 tracing::debug!("Done playing track");
                 self.state.now_playing = Some(handle);
 
+                // Save the state to disk
+                trigger_save(&ctx.link());
+
                 // The state was updated. Refresh the player view
                 true
             }
+
             PlayerMsg::JumpForward => {
                 jump_forward();
                 false
             }
+
             PlayerMsg::JumpBackward => {
                 jump_backward();
                 false
             }
+
             PlayerMsg::UpdatePlaybackSpeed => {
                 // Check the playback speed selector and update the playback speed accordingly.
                 // Also save the speed in the state.
@@ -410,6 +420,20 @@ impl Component for Player {
 
                 false
             }
+
+            PlayerMsg::StopIfPlaying(id) => {
+                // Check if the given ID matches the currently playing article
+                if self.state.now_playing == Some(id) {
+                    // On match, stop playing, clear the player state, and save the state
+                    pause();
+                    self.state = PlayerState::default();
+                    trigger_save(&ctx.link());
+                }
+
+                // The state was updated. Refresh the player view
+                true
+            }
+
             PlayerMsg::SetState(state) => {
                 // Set the state and make it reflected in the player
                 self.state = state;
@@ -465,7 +489,7 @@ impl Component for Player {
 
         // Wrap the media session actions in closures so we can give them to the API
         let actions = Actions {
-            play_action: Some(Closure::new(schedule_play)),
+            play_action: Some(Closure::new(|| spawn_local(async move { play().await }))),
             pause_action: Some(Closure::new(pause)),
             jump_forward_action: Some(Closure::new(jump_forward)),
             jump_backward_action: Some(Closure::new(jump_backward)),

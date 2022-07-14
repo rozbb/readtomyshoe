@@ -46,7 +46,7 @@ impl From<&CachedArticle> for QueueEntry {
 }
 
 /// A handle to retrieve a cached article from storage. This is just the title for now
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ArticleId(pub(crate) String);
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -66,15 +66,24 @@ impl Component for Queue {
     type Message = QueueMsg;
     type Properties = Props;
 
-    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             QueueMsg::Delete(idx) => {
                 // Remove the entry from the queue and delete the article from the cache
                 let entry = self.entries.remove(idx);
+
+                // Tell the player to stop playing this track if it's playing
+                ctx.props()
+                    .player_link
+                    .borrow()
+                    .clone()
+                    .unwrap()
+                    .send_message(PlayerMsg::StopIfPlaying(entry.id.clone()));
+
+                // Try deleting from cache
                 spawn_local(async move {
-                    // Try deleting
                     match caching::delete_article(&entry.id).await {
-                        Err(e) => tracing::error!("{:?}", e),
+                        Err(e) => tracing::error!("Couldn't delete {}: {:?}", &entry.id.0, e),
                         _ => (),
                     }
                 });

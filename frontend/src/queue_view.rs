@@ -167,9 +167,9 @@ fn render_queue_item(
     let remove_callback = queue_scope.callback(move |_| QueueMsg::Delete(pos));
     html! {
         <li class="queueControl">
-            <button class="queueControlPlay" title="Play" onclick={play_callback}>{ "▶️" }</button>
-            <p class="articleTitle"> {&entry.title} </p>
-            <button class="queueControlDelete" title="Delete from queue" onclick={remove_callback}>{ "🗑" }</button>
+            <button class="queuePlay" title="Play" onclick={play_callback}>{ "▶️" }</button>
+            <p class="queueArticleTitle"> {&entry.title} </p>
+            <button class="queueDelete" title="Delete from queue" onclick={remove_callback}>{ "🗑" }</button>
         </li>
     }
 }

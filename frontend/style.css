@@ -21,7 +21,6 @@ li {
     margin-bottom: 0.5rem;
 }
 
-
 label {
     margin-right: 0.5rem;
 }
@@ -50,19 +49,10 @@ label {
     }
 }
 
-/*
- * List items should not be blocks
- */
-.articleTitle {
-    padding: 0;
-    margin: 0;
-}
-
 .dateAdded {
     font-style: italic;
     font-size: 0.8em;
-    margin: 0;
-    padding-left: 1rem;
+    margin: 0 0 0 2rem;
 }
 
 /*
@@ -71,17 +61,15 @@ label {
 li>button {
     font-size: 1.3rem;
 }
-.addToQueue {
-    margin-right: 1rem;
+.libArticleTitle {
+    padding: 0;
+    margin: 0 0 0 1rem;
 }
-.queueControl {
-    justify-content: space-between;
+.queueArticleTitle {
+    margin: 0 1rem;
 }
-.queueControlDelete {
-    margin-left: 1rem;
-}
-.queueControlPlay {
-    margin-right: 1rem;
+.queueDelete {
+    margin-left: auto;
 }
 
 /*

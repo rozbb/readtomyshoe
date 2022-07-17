@@ -107,7 +107,7 @@ fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> H
                 { "+" }
             </button>
             <div class="articleDetails">
-                <p class="articleTitle">{ title }</p>
+                <p class="libArticleTitle">{ title }</p>
                 <p class="dateAdded">{ date_added_str }</p>
             </div>
         </li>

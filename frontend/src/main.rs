@@ -8,6 +8,7 @@ mod library_view;
 mod main_view;
 mod player_view;
 mod queue_view;
+mod utils;
 
 use app_view::App;
 

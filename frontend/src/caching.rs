@@ -1,6 +1,6 @@
 use crate::{
     player_view::{ArticleState, PlayerState},
-    queue_view::{ArticleId, CachedArticle, QueueEntry},
+    queue_view::{ArticleId, CachedArticle, Queue, QueueEntry},
 };
 
 use std::sync::Arc;
@@ -26,9 +26,19 @@ const ARTICLES_TABLE: &str = "articles";
 /// Name for the table that holds the current playback position for every article in ARTICLES_TABLE
 const ARTICLE_STATE_TABLE: &str = "article-states";
 
-/// Name for the table that holds the current player state, including the currently playing
-/// article, and playback speed
+/// Name for the singleton table that holds the ordered list of the article IDs in the current
+/// queue
+const QUEUE_TABLE: &str = "queue";
+
+/// Name for the singleton table that holds the current player state, including the currently
+/// playing article, and playback speed
 const PLAYER_STATE_TABLE: &str = "player-state";
+
+/// The queue table only holds one value, and that's the current queue
+const QUEUE_GLOBAL_KEY: f64 = 0.0;
+
+/// The player state table only holds one value, and that's the current player's state
+const PLAYER_STATE_GLOBAL_KEY: f64 = 0.0;
 
 /// Registers service_worker.js to do all the caching for this site. See service_worker.js for more
 /// details.
@@ -166,6 +176,10 @@ async fn initialize_db(db: &IdbDatabase) -> Result<(), AnyError> {
         .auto_increment(false)
         .key_path(Some(&JsValue::from_str("id")));
 
+    // The global queue object will always reside at key 0
+    let mut queue_params = IdbObjectStoreParameters::new();
+    queue_params.auto_increment(false).key_path(None);
+
     // The global position object will always reside at key 0
     let mut pos_params = IdbObjectStoreParameters::new();
     pos_params.auto_increment(false).key_path(None);
@@ -176,6 +190,8 @@ async fn initialize_db(db: &IdbDatabase) -> Result<(), AnyError> {
         .map_err(|e| wrap_jserror("couldn't make articles table", e))?;
     db.create_object_store_with_optional_parameters(ARTICLE_STATE_TABLE, &articles_params)
         .map_err(|e| wrap_jserror("couldn't make article states table", e))?;
+    db.create_object_store_with_optional_parameters(QUEUE_TABLE, &queue_params)
+        .map_err(|e| wrap_jserror("couldn't make queue table", e))?;
     db.create_object_store_with_optional_parameters(PLAYER_STATE_TABLE, &pos_params)
         .map_err(|e| wrap_jserror("couldn't make pos table", e))?;
 
@@ -422,23 +438,21 @@ pub(crate) async fn delete_article_state(id: &ArticleId) -> Result<(), AnyError>
     table_delete(ARTICLE_STATE_TABLE, &id.0).await
 }
 
-/// Loads the title and ID of every saved article
-pub(crate) async fn load_queue_entries() -> Result<Vec<QueueEntry>, AnyError> {
-    let keys = table_get_keys(ARTICLES_TABLE).await?;
-
-    // Convert the table entires into queue entries
-    Ok(keys
-        .into_iter()
-        .map(|v: JsValue| {
-            let title = v.as_string().unwrap();
-            let id = ArticleId(title.clone());
-            QueueEntry { title, id }
-        })
-        .collect())
+/// Saves the queue to IndexedDB
+pub(crate) async fn save_queue(queue: &Queue) -> Result<(), AnyError> {
+    let serialized_queue = JsValue::from_serde(&queue)?;
+    let key = JsValue::from_f64(QUEUE_GLOBAL_KEY);
+    table_put_with_key(QUEUE_TABLE, &key, &serialized_queue).await?;
+    Ok(())
 }
 
-/// The player state table only holds one value, and that's the current player's state
-const PLAYER_STATE_GLOBAL_KEY: f64 = 0.0;
+/// Gets the queue from the IndexedDB
+pub(crate) async fn load_queue() -> Result<Queue, AnyError> {
+    let key = JsValue::from_f64(QUEUE_GLOBAL_KEY);
+    table_get(QUEUE_TABLE, &key)
+        .await
+        .and_then(|v| JsValue::into_serde(&v).map_err(Into::into))
+}
 
 /// Saves the player state to IndexedDB
 pub(crate) async fn save_player_state(pos: &PlayerState) -> Result<(), AnyError> {

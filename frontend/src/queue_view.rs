@@ -17,6 +17,7 @@ pub struct Props {
 }
 
 /// An entry in the queue has the title and ID of the article
+#[derive(Clone, Serialize, Deserialize)]
 pub struct QueueEntry {
     pub(crate) id: ArticleId,
     pub(crate) title: String,
@@ -25,7 +26,7 @@ pub struct QueueEntry {
 pub enum QueueMsg {
     Add(QueueEntry),
     Delete(usize),
-    LoadFrom(Vec<QueueEntry>),
+    SetQueue(Queue),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -57,9 +58,29 @@ pub struct QueuePosition {
     cur_timestamp: f64,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Queue {
     entries: Vec<QueueEntry>,
+}
+
+impl Queue {
+    /// Saves the queue to the IndexedDB
+    fn save(&self) {
+        let self_copy = self.clone();
+        spawn_local(async move {
+            let _ = caching::save_queue(&self_copy)
+                .await
+                .map_err(|e| tracing::error!("Couldn't restore queue: {:?}", e));
+        });
+    }
+
+    /// Attempts to load the queue from IndexedDB
+    async fn load() -> Option<Queue> {
+        caching::load_queue()
+            .await
+            .map_err(|e| tracing::error!("Couldn't restore queue: {:?}", e))
+            .ok()
+    }
 }
 
 impl Component for Queue {
@@ -80,32 +101,30 @@ impl Component for Queue {
                     .unwrap()
                     .send_message(PlayerMsg::StopIfPlaying(entry.id.clone()));
 
+                // Save the queue
+                self.save();
+
                 // Delete the article from storage
                 spawn_local(async move {
                     // Delete the article itself
-                    match caching::delete_article(&entry.id).await {
-                        Err(e) => {
-                            tracing::error!("Couldn't delete article {}: {:?}", &entry.id.0, e)
-                        }
-                        _ => (),
-                    }
+                    let _ = caching::delete_article(&entry.id).await.map_err(|e| {
+                        tracing::error!("Couldn't delete article {}: {:?}", &entry.id.0, e)
+                    });
 
                     // Delete the reader's position in the article
-                    match caching::delete_article_state(&entry.id).await {
-                        Err(e) => {
-                            tracing::error!(
-                                "Couldn't delete state of article {}: {:?}",
-                                &entry.id.0,
-                                e
-                            )
-                        }
-                        _ => (),
-                    }
+                    let _ = caching::delete_article_state(&entry.id).await.map_err(|e| {
+                        tracing::error!("Couldn't delete state of article {}: {:?}", &entry.id.0, e)
+                    });
                 });
             }
-            QueueMsg::Add(entry) => self.entries.push(entry),
-            QueueMsg::LoadFrom(entries) => {
-                self.entries = entries;
+            QueueMsg::Add(entry) => {
+                // Add the entry to the queue
+                self.entries.push(entry);
+                // Save it to IndexedDB
+                self.save()
+            }
+            QueueMsg::SetQueue(queue) => {
+                *self = queue;
             }
         }
 
@@ -119,13 +138,15 @@ impl Component for Queue {
             .borrow_mut()
             .replace(ctx.link().clone());
 
-        // Try to get the cached queue from the IndexedDB
-        let link = ctx.link().clone();
-        spawn_local(async move {
-            match caching::load_queue_entries().await {
-                Ok(entries) => link.send_message(QueueMsg::LoadFrom(entries)),
-                Err(e) => tracing::error!("Couldn't restore queue: {:?}", e),
-            }
+        // Kick off a future to load the saved queue from IndexedDB
+        ctx.link().send_future_batch(async move {
+            // load() returns an Option<Queue>. Turn it into a singleton or empty vec, and make it
+            // a SetQueue message
+            Queue::load()
+                .await
+                .into_iter()
+                .map(QueueMsg::SetQueue)
+                .collect()
         });
 
         Self::default()

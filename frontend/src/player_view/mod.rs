@@ -64,7 +64,6 @@ fn get_selected_playback_speed() -> f64 {
 fn set_playback_speed(speed: f64, audio_link: &Scope<Audio>) {
     // Set the audio's playback speed
     audio_link.send_message(AudioMsg::SetPlaybackSpeed(speed));
-    tracing::error!("SET PLAYBAKC RATE");
 
     // If this playback speed appears in the playback speed selector, make it appear selected
     if PLAYBACK_SPEEDS.iter().position(|&s| s == speed).is_some() {

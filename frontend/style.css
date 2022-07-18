@@ -21,6 +21,12 @@ li {
     margin-bottom: 0.5rem;
 }
 
+details {
+    border: 1px solid #aaa;
+    border-radius: 4px;
+    padding: 0.5rem 0.5rem;
+}
+
 label {
     margin-right: 0.5rem;
 }
@@ -92,18 +98,30 @@ audio {
 
 fieldset {
     border-width: 0px;
+    margin-bottom: 1rem;
 }
 
-fieldset>label {
+fieldset .field {
+    margin-bottom: 1rem;
+}
+
+fieldset label {
     vertical-align: top;
     text-align: right;
 }
 
-fieldset>textarea {
-    width: 100%;
+fieldset h2 {
+    margin-bottom: 0.5rem;
 }
 
-fieldset>input {
+fieldset input {
     width: 100%;
     max-width: 60%;
 }
+
+fieldset {
+    border-style: solid;
+    border-color: black;
+    border-width: 1px;
+}
+

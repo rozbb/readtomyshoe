@@ -9,7 +9,7 @@ use web_sys::{
 use yew::prelude::*;
 
 /// The ID of the unique audio element the page
-const AUDIO_ELEM_ID: &str = "mainAudio";
+pub const AUDIO_ELEM_ID: &str = "mainAudio";
 
 // Always jump by 10sec
 const JUMP_SIZE: f64 = 10.0;

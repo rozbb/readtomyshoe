@@ -186,11 +186,29 @@ fn render_queue_item(
         player_scope.send_message(PlayerMsg::Play(id.clone()));
     });
     let remove_callback = queue_scope.callback(move |_| QueueMsg::Delete(pos));
+
+    let play_title_text = format!("Play {}", entry.title);
+    let delete_title_text = format!("Delete from queue {}", entry.title);
+
     html! {
         <li class="queueControl">
-            <button class="queuePlay" title="Play" onclick={play_callback}>{ "▶️" }</button>
-            <p class="queueArticleTitle"> {&entry.title} </p>
-            <button class="queueDelete" title="Delete from queue" onclick={remove_callback}>{ "🗑" }</button>
+            <button
+                class="queuePlay"
+                aria-label={ play_title_text.clone() }
+                title={ play_title_text }
+                onclick={play_callback}
+            >
+                { "▶️" }
+            </button>
+            <p aria-hidden="true" class="queueArticleTitle"> {&entry.title} </p>
+            <button
+                class="queueDelete"
+                aria-label={ delete_title_text.clone() }
+                title={ delete_title_text }
+                onclick={remove_callback}
+            >
+                { "🗑" }
+            </button>
         </li>
     }
 }

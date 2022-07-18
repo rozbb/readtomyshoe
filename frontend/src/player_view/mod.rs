@@ -352,15 +352,25 @@ impl Component for Player {
                 <p><b>{ "Now Playing: " }</b> { now_playing_str }</p>
                 <Audio {audio_link} />
                 <div class="audiocontrol" title="More playback controls">
-                    <button title="Jump backwards 10 seconds" onclick={jump_backward_cb}>
+                    <button
+                        aria-label="Jump backwards 10 seconds"
+                        title="Jump backwards 10 seconds"
+                        onclick={jump_backward_cb}
+                    >
                         { "↩️" }
                     </button>
-                    <button title="Jump forwards 10 seconds" onclick={jump_forward_cb}>
+                    <button
+                        aria-label="Jump forwards 10 seconds"
+                        title="Jump forwards 10 seconds"
+                        onclick={jump_forward_cb}
+                    >
                     { "↪️" }
                     </button>
 
                     <div class="playbackSpeedSection">
-                        <label for={SPEED_SELECTOR_ID}>{ "Playback Speed:" }</label>
+                        <label id="speedSelectorLabel" for={SPEED_SELECTOR_ID}>
+                            { "Playback Speed:" }
+                        </label>
                         { playback_speed_selector }
                     </div>
                 </div>

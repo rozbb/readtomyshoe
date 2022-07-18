@@ -171,29 +171,39 @@ impl Component for Add {
 
         html! {
             <main>
-                <h2>{ "Add article by URL" }</h2>
-                <fieldset title="Add by URL">
-                    <label for={URL_FORM_ID}>{ "Article URL:" }</label>
-                    <input type="text" id={URL_FORM_ID} required=true />
-                    <br />
-                    <button onclick={add_url_callback}>{ "Submit" }</button>
+                <h1>{ "Add article" }</h1>
+                <p>{
+                    "You may add an article either by providing a URL, or by pasting the title
+                    and body text"
+                }</p>
+                <fieldset>
+                    <legend><h2>{ "Add article by URL" }</h2></legend>
+                    <div class="field">
+                        <label for={URL_FORM_ID}>{ "Article URL:" }</label>
+                        <input type="text" id={URL_FORM_ID} required=true />
+                    </div>
+                    <button type="submit" onclick={add_url_callback}>{ "Submit" }</button>
                 </fieldset>
-                <h2>{ "Add article by text" }</h2>
-                <fieldset title="Add by text">
-                    <label for={TITLE_FORM_ID}>{ "Article title:" }</label>
-                    <input type="text" id={TITLE_FORM_ID} required=true />
-                    <br />
-                    <label for={BODY_FORM_ID}>{ "Article body:" }</label>
-                    <textarea id={BODY_FORM_ID} rows="10" cols="33" required=true></textarea>
-                    <br />
-                    <button onclick={add_text_callback}>{ "Submit" }</button>
+                <fieldset>
+                    <legend><h2>{ "Add article by text" }</h2></legend>
+                    <div class="field">
+                        <label for={TITLE_FORM_ID}>{ "Article title:" }</label>
+                        <input type="text" id={TITLE_FORM_ID} required=true />
+                    </div>
+                    <div class="field">
+                        <label for={BODY_FORM_ID}>{ "Article body:" }</label>
+                        <textarea id={BODY_FORM_ID} rows="10" cols="33" required=true></textarea>
+                    </div>
+                    <div>
+                        <button type="submit" onclick={add_text_callback}>{ "Submit" }</button>
+                    </div>
                 </fieldset>
-                <section id="progress" title="progress">
+                <section aria-live="polite" id="progress" title="progress">
                     <p>
                         { self.progress.join(" ") }
                     </p>
                 </section>
-                <section id="errors" title="errors">
+                <section aria-live="assertive" aria-role="alert" id="errors" title="errors">
                     <p style={ "color: red;" }>
                         { err_str }
                     </p>

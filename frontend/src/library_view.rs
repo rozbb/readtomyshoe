@@ -100,14 +100,20 @@ fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> H
         Some(d) => format!("Added on {d}"),
         None => format!("Date added unknown"),
     };
+    let add_title_text = format!("Add to queue {}", title);
 
     html! {
         <li>
-            <button onclick={callback} class="addToQueue" title="Add to queue">
+            <button
+                onclick={callback}
+                class="addToQueue"
+                aria-label={ add_title_text.clone() }
+                title={ add_title_text }
+            >
                 { "+" }
             </button>
             <div class="articleDetails">
-                <p class="libArticleTitle">{ title }</p>
+                <p aria-hidden="true" class="libArticleTitle">{ title }</p>
                 <p class="dateAdded">{ date_added_str }</p>
             </div>
         </li>
@@ -215,7 +221,7 @@ impl Component for Library {
         // If there's an error, render it
         if let Some(err) = &self.err {
             html! {
-                <p style={ "color: red;" }>
+                <p style={ "color: red;" } aria-live="assertive" aria-role="alert" title="errors">
                     { format!("{:?}", err) }
                 </p>
             }

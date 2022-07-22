@@ -163,8 +163,9 @@ impl Component for Queue {
             .map(|(i, entry)| render_queue_item(entry, i, player_link, queue_link))
             .collect::<Html>();
         html! {
-            <section title="queue">
-                <ul role="list">
+            <section title="Queue">
+                <h2>{ "Queue" }</h2>
+                <ul role="list" aria-label="Queue entries">
                     { rendered_list }
                 </ul>
             </section>
@@ -187,11 +188,11 @@ fn render_queue_item(
     });
     let remove_callback = queue_scope.callback(move |_| QueueMsg::Delete(pos));
 
-    let play_title_text = format!("Play {}", entry.title);
-    let delete_title_text = format!("Delete from queue {}", entry.title);
+    let play_title_text = format!("Play: {}", entry.title);
+    let delete_title_text = format!("Delete from queue: {}", entry.title);
 
     html! {
-        <li class="queueControl">
+        <li aria-label={ entry.title.clone() } class="queueControl">
             <button
                 class="queuePlay"
                 aria-label={ play_title_text.clone() }

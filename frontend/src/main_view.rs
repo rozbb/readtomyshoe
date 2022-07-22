@@ -1,10 +1,6 @@
-use crate::{
-    app_view::Route, library_view::Library, player_view::Player, queue_view::Queue,
-    WeakComponentLink,
-};
+use crate::{library_view::Library, player_view::Player, queue_view::Queue, WeakComponentLink};
 
 use yew::prelude::*;
-use yew_router::prelude::*;
 
 pub struct Main {
     /// Indicates whether the app has access to an IndexedDb. If this is false, it's a fatal error
@@ -78,17 +74,9 @@ impl Component for Main {
         html! {
             <>
                 { header() }
-                <h2>{ "Player" }</h2>
-                    <Player {player_link} />
-                <h2>{ "Queue" }</h2>
-                    <Queue {queue_link} {player_link} />
-                <h2>{ "Library" }</h2>
-                    <div id="addArticle">
-                        <Link<Route> to={Route::Add} classes="navLink">
-                            { "Add Article" }
-                        </Link<Route>>
-                    </div>
-                    <Library {queue_link} />
+                <Player {player_link} />
+                <Queue {queue_link} {player_link} />
+                <Library {queue_link} />
             </>
         }
     }
@@ -114,8 +102,6 @@ fn header() -> Html {
                     want to listen to an article, you first click the \"+\" button beside the
                     article in the library. This adds it to your queue, where it can be played.
                 "}</dd>
-            </dl>
-            <dl>
                 <dt><strong>{ "Queue" }</strong></dt>
                 <dd>{"
                     The queue stores all the articles that you want to listen to. These articles
@@ -125,8 +111,6 @@ fn header() -> Html {
                     article, so you can come back to it later. To delete an article from the queue,
                     press the \"🗑\" button.
                 "}</dd>
-            </dl>
-            <dl>
                 <dt><strong>{ "Player" }</strong></dt>
                 <dd>{"
                     The player section contains all the controls you need to adjust playback. You
@@ -134,28 +118,26 @@ fn header() -> Html {
                     When you load ReadToMyShoe, the player will already be set to the last article
                     you were reading (if any), so all you need to do is press play.
                 "}</dd>
-            </dl>
-            <dl>
                 <dt><strong>{ "Bonus features" }</strong></dt>
                 <dd>{"There are lots of useful features that this site provides. Here are some."}
-                <ul>
-                    <li><p><strong>{" Offline mode: " }</strong>{"
-                        This site works entirely offline. Go ahead, turn on airplane mode and
-                        refresh this page. You should see everything still in your queue. The only
-                        thing you can't do is view the library, since the library is in the cloud.
-                    "}</p></li>
-                    <li><p><strong>{"Add to home screen: " }</strong>{"
-                        This website can be added to your homescreen and behave
-                        just like a native app. The way to do this varies by device and browser, so
-                        you'll have to do some searching to get this set up.
-                    "}</p></li>
-                    <li><p><strong>{"Control from lockscreen: " }</strong>{"
-                        Control from lockscreen: ReadToMyShoe lets you control audio playback from
-                        whatever media controls you have on your phone. On the iPhone, for example,
-                        you can play, pause, and jump from Control Center, and even from the
-                        lockscreen.
-                    "}</p></li>
-                </ul>
+                    <ul>
+                        <li><p><strong>{" Offline mode: " }</strong>{"
+                            This site works entirely offline. Go ahead, turn on airplane mode and
+                            refresh this page. You should see everything still in your queue. The
+                            only thing you can't do is view the library, since the library is in
+                            the cloud.
+                        "}</p></li>
+                        <li><p><strong>{"Add to home screen: " }</strong>{"
+                            This website can be added to your homescreen and behave just like a
+                            native app. The way to do this varies by device and browser, so you'll
+                            have to do some searching to get this set up.
+                        "}</p></li>
+                        <li><p><strong>{"Control from lockscreen: " }</strong>{"
+                            ReadToMyShoe lets you control audio playback from whatever media
+                            controls you have on your phone. On the iPhone, for example, you can
+                            play, pause, and jump from Control Center, and even from the lockscreen.
+                        "}</p></li>
+                    </ul>
                 </dd>
             </dl>
         </>
@@ -164,7 +146,7 @@ fn header() -> Html {
     html! {
         <header>
             <h1>{ "🥾 ReadToMyShoe" }</h1>
-            <details aria-label="Click to open help">
+            <details>
                 <summary class="navLink"><strong>{ "Help" }</strong></summary>
                 <div aria-live="polite">{ help_text }</div>
             </details>

@@ -347,12 +347,13 @@ impl Component for Player {
             .now_playing
             .as_ref()
             .map(|c| c.0.clone())
-            .unwrap_or(String::default());
+            .unwrap_or("[no article loaded]".to_string());
 
         let audio_link = self.audio_link.clone();
         html! {
-            <section title="player">
-                <p><b>{ "Now Playing: " }</b> { now_playing_str }</p>
+            <section title="Player">
+                <h2>{ "Player" }</h2>
+                <p><strong>{ "Now Playing: " }</strong> { now_playing_str }</p>
                 <Audio {audio_link} />
                 <div class="audiocontrol" title="More playback controls">
                     <button

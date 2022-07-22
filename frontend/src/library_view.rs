@@ -1,4 +1,5 @@
 use crate::{
+    app_view::Route,
     caching,
     queue_view::{ArticleId, CachedArticle, Queue, QueueEntry, QueueMsg},
     WeakComponentLink,
@@ -10,6 +11,7 @@ use gloo_net::http::Request;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use web_sys::PageTransitionEvent;
 use yew::{html::Scope, prelude::*};
+use yew_router::prelude::*;
 
 /// Fetches the list of articles
 async fn fetch_article_list() -> Result<LibraryCatalog, AnyError> {
@@ -100,10 +102,10 @@ fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> H
         Some(d) => format!("Added on {d}"),
         None => format!("Date added unknown"),
     };
-    let add_title_text = format!("Add to queue {}", title);
+    let add_title_text = format!("Add to queue: {}", title);
 
     html! {
-        <li>
+        <li aria-label={ title.clone() }>
             <button
                 onclick={callback}
                 class="addToQueue"
@@ -233,8 +235,14 @@ impl Component for Library {
                 .map(|metadata| render_lib_item(metadata.clone(), ctx.link().clone()))
                 .collect::<Html>();
             html! {
-                <section title="library">
-                    <ul role="list">
+                <section title="Library">
+                    <h2>{ "Library" }</h2>
+                    <div id="addArticle">
+                        <Link<Route> to={Route::Add} classes="navLink">
+                            { "Add Article" }
+                        </Link<Route>>
+                    </div>
+                    <ul role="list" aria-label="Library catalog">
                         { rendered_list }
                     </ul>
                 </section>

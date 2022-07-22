@@ -234,7 +234,7 @@ impl Component for Library {
                 .collect::<Html>();
             html! {
                 <section title="library">
-                    <ul>
+                    <ul role="list">
                         { rendered_list }
                     </ul>
                 </section>

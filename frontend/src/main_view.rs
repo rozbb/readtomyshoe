@@ -96,7 +96,7 @@ impl Component for Main {
 
 fn header() -> Html {
     let help_text = html! {
-        <div>
+        <>
             <p>{"
                 ReadToMyShoe is a website that lets you listen to internet articles and blog posts,
                 even when you're offline. ReadToMyShoe is broken up into three sections: the
@@ -158,7 +158,7 @@ fn header() -> Html {
                 </ul>
                 </dd>
             </dl>
-        </div>
+        </>
     };
 
     html! {

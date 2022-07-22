@@ -8,7 +8,6 @@
 
 h1 {
     display: inline;
-    vertical-align: middle;
 }
 
 body {
@@ -51,9 +50,13 @@ label {
  */
 
 details {
-    vertical-align: middle;
     display: inline;
+    float: right;
+}
+
+details[open] {
     width: fit-content;
+    float: none;
 }
 
 details > div {
@@ -63,10 +66,12 @@ details > div {
 }
 
 details > summary {
-    cursor: pointer;
     list-style: none;
-    font-size: 14px;
-    margin-left: 1rem;
+}
+
+/* Same thing as above but special bc Safari is a snowflake */
+details summary::-webkit-details-marker {
+  display: none;
 }
 
 details[open] > summary {
@@ -74,7 +79,7 @@ details[open] > summary {
     margin-left: 0;
 }
 
-details li p {
+details p {
     margin: 0;
 }
 

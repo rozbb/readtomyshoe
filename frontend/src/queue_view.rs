@@ -164,7 +164,7 @@ impl Component for Queue {
             .collect::<Html>();
         html! {
             <section title="queue">
-                <ul>
+                <ul role="list">
                     { rendered_list }
                 </ul>
             </section>

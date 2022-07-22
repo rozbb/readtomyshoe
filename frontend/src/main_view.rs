@@ -64,19 +64,19 @@ impl Component for Main {
         // If we don't have IndexedDB access, don't show anything
         if !self.has_db_access {
             return html! {
-                <main>
+                <>
                     { header() }
                     <h3 aria-role="alert" aria-live="assertive" style="color: red">{
                         "Error: cannot access local storage.
                         ReadToMyShoe does not work in private browsing mode in Firefox."
                     }</h3>
-                </main>
+                </>
             };
         }
 
         // Show the main view
         html! {
-            <main>
+            <>
                 { header() }
                 <h2>{ "Player" }</h2>
                     <Player {player_link} />
@@ -89,14 +89,14 @@ impl Component for Main {
                         </Link<Route>>
                     </div>
                     <Library {queue_link} />
-            </main>
+            </>
         }
     }
 }
 
 fn header() -> Html {
     let help_text = html! {
-        <>
+        <div>
             <p>{"
                 ReadToMyShoe is a website that lets you listen to internet articles and blog posts,
                 even when you're offline. ReadToMyShoe is broken up into three sections: the
@@ -109,7 +109,7 @@ fn header() -> Html {
                 <dd>{"
                     The library tells you which articles you have already saved to ReadToMyShoe.
                     To add a new article to your library, click the
-                    "}<a href="#addArticle">{"Add Article"}</a>{"
+                    "}<a class="navLink" href="#addArticle">{"Add Article"}</a>{"
                     button. You cannot play articles directly from the library. Instead, if you
                     want to listen to an article, you first click the \"+\" button beside the
                     article in the library. This adds it to your queue, where it can be played.
@@ -139,36 +139,35 @@ fn header() -> Html {
                 <dt><strong>{ "Bonus features" }</strong></dt>
                 <dd>{"There are lots of useful features that this site provides. Here are some."}
                 <ul>
-                    <li>{"
-                        Offline mode: this site works entirely offline. Go ahead, try it! Turn on
-                        airplane mode and refresh this page. You should see everything still in
-                        your queue. The only thing you can't do is view the library, since the
-                        library is in the cloud.
-                    "}</li>
-                    <li>{"
-                        Add to home screen: This website can be added to your homescreen and behave
+                    <li><p><strong>{" Offline mode: " }</strong>{"
+                        This site works entirely offline. Go ahead, turn on airplane mode and
+                        refresh this page. You should see everything still in your queue. The only
+                        thing you can't do is view the library, since the library is in the cloud.
+                    "}</p></li>
+                    <li><p><strong>{"Add to home screen: " }</strong>{"
+                        This website can be added to your homescreen and behave
                         just like a native app. The way to do this varies by device and browser, so
                         you'll have to do some searching to get this set up.
-                    "}</li>
-                    <li>{"
+                    "}</p></li>
+                    <li><p><strong>{"Control from lockscreen: " }</strong>{"
                         Control from lockscreen: ReadToMyShoe lets you control audio playback from
                         whatever media controls you have on your phone. On the iPhone, for example,
                         you can play, pause, and jump from Control Center, and even from the
                         lockscreen.
-                    "}</li>
+                    "}</p></li>
                 </ul>
                 </dd>
             </dl>
-        </>
+        </div>
     };
 
     html! {
-        <>
+        <header>
             <h1>{ "🥾 ReadToMyShoe" }</h1>
             <details aria-label="Click to open help">
-                <summary><strong>{ "Help (click to open)" }</strong></summary>
+                <summary class="navLink"><strong>{ "Help" }</strong></summary>
                 <div aria-live="polite">{ help_text }</div>
             </details>
-        </>
+        </header>
     }
 }

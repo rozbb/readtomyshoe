@@ -2,6 +2,15 @@
  * Some general styling
  */
 
+*:focus {
+    outline: 2px solid #d71ef7;
+}
+
+h1 {
+    display: inline;
+    vertical-align: middle;
+}
+
 body {
     font: 18px/1.4 sans-serif;
     margin: 1em auto;
@@ -21,12 +30,6 @@ li {
     margin-bottom: 0.5rem;
 }
 
-details {
-    border: 1px solid #aaa;
-    border-radius: 4px;
-    padding: 0.5rem 0.5rem;
-}
-
 label {
     margin-right: 0.5rem;
 }
@@ -36,29 +39,43 @@ label {
     font-weight: bold;
 }
 
-/*
- * Color choices for dark mode
- */
-@media (prefers-color-scheme: dark) {
-    body {
-        color: #ccc;
-        background: #1b1b1b;
-    }
-
-    .navLink {
-        color: #5bf;
-    }
-
-    textarea, input[type="text"] {
-      border-radius: 3px;
-      background-color: #ccc;
-    }
-}
-
 .dateAdded {
     font-style: italic;
     font-size: 0.8em;
     margin: 0 0 0 2rem;
+}
+
+
+/*
+ * Styling for the help box
+ */
+
+details {
+    vertical-align: middle;
+    display: inline;
+    width: fit-content;
+}
+
+details > div {
+    border: 1px solid;
+    border-radius: 3px;
+    padding: 0.3rem 0.5rem;
+}
+
+details > summary {
+    cursor: pointer;
+    list-style: none;
+    font-size: 14px;
+    margin-left: 1rem;
+}
+
+details[open] > summary {
+    font-size: 18px;
+    margin-left: 0;
+}
+
+details li p {
+    margin: 0;
 }
 
 /*
@@ -97,7 +114,10 @@ audio {
  */
 
 fieldset {
-    border-width: 0px;
+    border-style: solid;
+    border-color: black;
+    border-radius: 3px;
+    border-width: 1px;
     margin-bottom: 1rem;
 }
 
@@ -114,14 +134,34 @@ fieldset h2 {
     margin-bottom: 0.5rem;
 }
 
-fieldset input {
-    width: 100%;
-    max-width: 60%;
+fieldset input,textarea {
+    width: 60%;
 }
 
-fieldset {
-    border-style: solid;
-    border-color: black;
-    border-width: 1px;
+/*
+ * Color choices for dark mode
+ */
+@media (prefers-color-scheme: dark) {
+    body {
+        color: #ccc;
+        background: #1b1b1b;
+    }
+
+    .navLink {
+        color: #5bf;
+    }
+
+    textarea, input[type="text"] {
+      border-radius: 3px;
+      background-color: #ccc;
+    }
+
+    details {
+        border-color: #ccc;
+    }
+
+    fieldset {
+        border-color: #ccc;
+    }
 }
 

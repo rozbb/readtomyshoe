@@ -67,6 +67,7 @@ details > div {
 
 details > summary {
     list-style: none;
+    cursor: pointer;
 }
 
 /* Same thing as above but special bc Safari is a snowflake */

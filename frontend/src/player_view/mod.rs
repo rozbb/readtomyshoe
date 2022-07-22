@@ -211,8 +211,8 @@ impl Component for Player {
                     // On match, stop playing and clear the <audio> element of all information
                     audio_link.send_message(AudioMsg::Stop);
 
-                    // Now clear the player state, and save the state
-                    self.state = PlayerState::default();
+                    // Now clear the current track, and save the state
+                    self.state.now_playing = None;
                     // This is an ad-hoc (ie non-periodic) save
                     let periodic = false;
                     trigger_save(periodic, &ctx.link());
@@ -293,9 +293,12 @@ impl Component for Player {
         // Kick off a future to get the last known player state
         let link = ctx.link().clone();
         spawn_local(async move {
-            if let Ok(state) = caching::load_player_state().await {
-                tracing::info!("successfully restored player from save");
-                link.send_message(PlayerMsg::SetState(state));
+            match caching::load_player_state().await {
+                Ok(state) => {
+                    tracing::trace!("successfully restored player from save");
+                    link.send_message(PlayerMsg::SetState(state));
+                }
+                Err(e) => tracing::error!("could not load player state: {:?}", e),
             }
         });
 

@@ -1,6 +1,6 @@
 //! Implements a barebones client to the Google Cloud TTS service
 
-use anyhow::{bail, Error};
+use anyhow::{anyhow, bail, Error};
 use bytes::Bytes;
 use futures::Future;
 use serde::Deserialize;
@@ -57,7 +57,7 @@ impl TtsRequest {
 
 pub(crate) fn get_api_key() -> Result<String, Error> {
     std::fs::read_to_string(API_KEY_FILE).map_err(|e| {
-        anyhow::anyhow!(
+        anyhow!(
             "Could not open API key file {API_KEY_FILE}. \
             Read the README for info about how to get an API key. {:?}",
             e,
@@ -113,18 +113,22 @@ pub(crate) async fn tts(
     api_key: &str,
     TtsRequest { text, use_wavenet }: TtsRequest,
 ) -> Result<Bytes, Error> {
-    let api_key_iter = core::iter::repeat(api_key.to_string());
+    let api_key_iter = core::iter::repeat(api_key);
 
     // Break up the TTS tasks into smaller ones of at most MAX_CHARS_PER_REQUEST
-    let tts_tasks = break_english_text(&text)?
+    let tts_tasks = break_english_text(&text, MAX_CHARS_PER_REQUEST)?
         .into_iter()
         .zip(api_key_iter)
-        .map(|(slice, api_key)| async move {
-            let slice_req = TtsRequest {
-                text: slice,
-                use_wavenet,
-            };
-            tts_single(&api_key, &slice_req).await
+        .map(|(slice, api_key)| {
+            let slice = slice.to_string();
+            let api_key = api_key.to_string();
+            async move {
+                let slice_req = TtsRequest {
+                    text: slice,
+                    use_wavenet,
+                };
+                tts_single(&api_key, &slice_req).await
+            }
         });
 
     // Do the tasks in parallel and concat the resulting MP3 files. Fun fact: the concatenation of
@@ -134,63 +138,166 @@ pub(crate) async fn tts(
     Ok(final_mp3)
 }
 
-/// Splits the given str at all the specified indices
-fn split_at_multi<'a>(mut text: &'a str, indices: &[usize]) -> Vec<String> {
-    tracing::debug!("split_at_multi with indices {:?}", indices);
+/// Splits the given str at all the specified indices. Also removes the first character of the
+/// all but the first split, since it's just punctuation.
+fn split_at_multi<'a>(mut text: &'a str, indices: &[usize]) -> Vec<&'a str> {
     let mut slices = Vec::new();
     let mut last_idx = 0;
 
     for &idx in indices {
         // Split at the specified point and save the slice
         let (slice, rest) = text.split_at(idx - last_idx);
-        slices.push(slice.to_string());
+        slices.push(slice);
 
         // Update the running slice and pos
         last_idx = idx;
+        // Strip the leading punctuation. This happens after the first split. This shifts all the
+        // indices down by 1
+        //text = &rest[1..];
         text = rest;
     }
 
     // Push the remaining slice
-    slices.push(text.to_string());
+    slices.push(text);
     slices
 }
 
-/// Breaks the given text into at most MAX_CHARS_PER_REQUEST-sized chunks
-pub(crate) fn break_english_text(text: &str) -> Result<Vec<String>, Error> {
+/// Attempts to break the given text into chunks of size at most `max_chunk_size`, making chunks as
+/// large as possible. The only allowed break point is `delim` characters. This is best-effort,
+/// meaning that there may be chunks returned which exceed `max_chunk_size`.
+pub(crate) fn break_greedily_at_delim(text: &str, delim: char, max_chunk_size: usize) -> Vec<&str> {
     let mut breaks = Vec::new();
 
-    // First pass is break on newlines if possible
+    // Find all the delimiters
+    let delim_indices = text.match_indices(delim).map(|(i, _)| i);
 
-    // Find all the newlines
-    let newline_indices = text.match_indices("\n").map(|(i, _)| i);
-    // Keep track of the last break that puts us below the max char limiit
-    let mut candidate_break = None;
+    // Keep track of the last break that we haven't chosen
+    let mut last_candidate_break = None;
 
-    // Make the last breakpoint the EOF, otherwise we'd just be counting span size between newlines
-    // (leaving out the span between the final newline and EOF)
+    // Make the last breakpoint the EOF, otherwise we'd just be counting span size between delims
+    // (leaving out the span between the final delim and EOF)
     let eof = text.len();
-    for cur_break in newline_indices.chain(iter::once(eof)) {
+    for cur_break in delim_indices.chain(iter::once(eof)) {
         let last_break = breaks.last().unwrap_or(&0);
 
-        // If we could reasonably break here, save it as a candidate
-        if cur_break - last_break <= MAX_CHARS_PER_REQUEST {
-            candidate_break = Some(cur_break);
+        if cur_break - last_break <= max_chunk_size {
+            last_candidate_break = Some(cur_break);
         } else {
             // If we cannot break here, try to break at the last candidate. If there was none, then
             // we cannot break.
-            match candidate_break {
-                Some(b) => breaks.push(b),
-                None => bail!("Could not find a sufficiently short paragraph to break"),
+            match last_candidate_break {
+                Some(b) => {
+                    breaks.push(b);
+                    last_candidate_break = Some(cur_break);
+                }
+                None => {
+                    // This chunk is too big, but we can't do anything about it. Add a break right
+                    // here (unless it's the end of the text)
+                    if cur_break != eof {
+                        breaks.push(cur_break);
+                        // Clear the candidate break. Next break has to be after cur_break
+                        last_candidate_break = None;
+                    }
+                }
             }
         }
     }
 
-    // One last check: make sure that [last newline, EOF] isn't too big. There's nothing we can do
-    // about that except error
-    let last_newline = text.rfind("\n").unwrap_or(0);
-    if eof - last_newline > MAX_CHARS_PER_REQUEST {
-        bail!("Final text span is unbreakable");
+    split_at_multi(text, &breaks)
+}
+
+/// Attempts to break the given text into chunks of size at most `max_chunk_size`, making chunks as
+/// large as possible. The delimiters given are used in decreasing order of preference. If the text
+/// can be broken at just newlines, for example, that'd be preferred. But if there's a very large
+/// paragraph, then we have to break at periods. And if there's a very long sentence, we have to
+/// break on commas, etc.
+fn break_greedily_at_delims<'a>(
+    text: &'a str,
+    max_chunk_size: usize,
+    delims: &[char],
+) -> Result<Vec<&'a str>, Error> {
+    // Break the text into the f irst delim first
+    let mut chunks = break_greedily_at_delim(text, delims[0], max_chunk_size);
+
+    // If there are chunks greater than max_chunk_size, break them up. Use every delimiter if need
+    // be.
+    for &delim in &delims[1..] {
+        chunks = chunks
+            .into_iter()
+            .flat_map(|chunk| {
+                if chunk.len() > max_chunk_size {
+                    break_greedily_at_delim(&chunk, delim, max_chunk_size)
+                } else {
+                    vec![chunk]
+                }
+            })
+            .collect();
     }
 
-    Ok(split_at_multi(text, &breaks))
+    // Now check that everything was broken into sufficiently small pieces
+    for chunk in &chunks {
+        if chunk.len() > max_chunk_size {
+            bail!("Couldn't break chunk {:?}", chunk);
+        }
+    }
+
+    Ok(chunks)
+}
+
+/// Breaks English text into bounded-size chunks by newlines, then (if necessary) colons,
+/// then periods, then commas.
+fn break_english_text(text: &str, max_chunk_size: usize) -> Result<Vec<&str>, Error> {
+    break_greedily_at_delims(text, max_chunk_size, &['\n', ':', '.', ','])
+}
+
+#[test]
+fn text_breaking() {
+    let text = "\
+        Mr James Duffy lived in Chapelizod because he wished to live as far as possible from the \
+        city of which he was a citizen and because he found all the other suburbs of Dublin mean, \
+        modern and pretentious.
+        He lived in an old sombre house and from his windows he could look into the disused \
+        distillery or upwards along the shallow river on which Dublin is built. The lofty walls \
+        of his uncarpeted room were free from pictures. He had himself bought every article of \
+        furniture in the room: a black iron bedstead, an iron washstand, four cane chairs, a \
+        clothes-rack, a coal-scuttle, a fender and irons and a square table on which lay a double \
+        desk. A bookcase had been made in an alcove by means of shelves of white wood. The bed \
+        was clothed with white bedclothes and a black and scarlet rug covered the foot. A little \
+        hand-mirror hung above the washstand and during the day a white-shaded lamp stood as the \
+        sole ornament of the mantelpiece. The books on the white wooden shelves were arranged \
+        from below upwards according to bulk. A complete Wordsworth stood at one end of the \
+        lowest shelf and a copy of the Maynooth Catechism, sewn into the cloth cover of a \
+        notebook, stood at one end of the top shelf. Writing materials were always on the desk. \
+        In the desk lay a manuscript translation of Hauptmann’s Michael Kramer, the stage \
+        directions of which were written in purple ink, and a little sheaf of papers held \
+        together by a brass pin. In these sheets a sentence was inscribed from time to time and, \
+        in an ironical moment, the headline of an advertisement for Bile Beans had been pasted on \
+        to the first sheet. On lifting the lid of the desk a faint fragrance escaped—the \
+        fragrance of new cedarwood pencils or of a bottle of gum or of an overripe apple which \
+        might have been left there and forgotten.\
+    ";
+    let chunk_size = 220;
+    let chunks = break_english_text(text, chunk_size).unwrap();
+
+    // Make sure the chunk sizes add up the the total text size
+    assert_eq!(chunks.iter().map(|c| c.len()).sum::<usize>(), text.len());
+
+    // Make sure the chunks are nonempty and don't exceed the chunk_size
+    for chunk in chunks {
+        assert!(chunk.len() > 0);
+        assert!(chunk.len() <= chunk_size);
+    }
+
+    let short_text = "\
+        Mr James Duffy lived in Chapelizod because he wished to live as far as possible from the \
+        city of which he was a citizen and because he found all the other suburbs of Dublin mean, \
+        modern and pretentious.\
+    ";
+    let chunks = break_english_text(short_text, chunk_size).unwrap();
+    assert_eq!(chunks.len(), 1);
+    // Make sure the chunk sizes add up the the total text size
+    assert_eq!(
+        chunks.iter().map(|c| c.len()).sum::<usize>(),
+        short_text.len()
+    );
 }

@@ -5,6 +5,8 @@ use bytes::Bytes;
 use futures::Future;
 use serde::Deserialize;
 
+use core::iter;
+
 /// Path to the file that holds the Google Cloud API key
 const API_KEY_FILE: &str = "gcp_api.key";
 
@@ -114,15 +116,16 @@ pub(crate) async fn tts(
     let api_key_iter = core::iter::repeat(api_key.to_string());
 
     // Break up the TTS tasks into smaller ones of at most MAX_CHARS_PER_REQUEST
-    let tts_tasks = break_english_text(&text).into_iter().zip(api_key_iter).map(
-        |(slice, api_key)| async move {
+    let tts_tasks = break_english_text(&text)?
+        .into_iter()
+        .zip(api_key_iter)
+        .map(|(slice, api_key)| async move {
             let slice_req = TtsRequest {
                 text: slice,
                 use_wavenet,
             };
             tts_single(&api_key, &slice_req).await
-        },
-    );
+        });
 
     // Do the tasks in parallel and concat the resulting MP3 files. Fun fact: the concatenation of
     // MP3 files is itself a valid MP3 file.
@@ -153,7 +156,7 @@ fn split_at_multi<'a>(mut text: &'a str, indices: &[usize]) -> Vec<String> {
 }
 
 /// Breaks the given text into at most MAX_CHARS_PER_REQUEST-sized chunks
-pub(crate) fn break_english_text(text: &str) -> Vec<String> {
+pub(crate) fn break_english_text(text: &str) -> Result<Vec<String>, Error> {
     let mut breaks = Vec::new();
 
     // First pass is break on newlines if possible
@@ -163,21 +166,31 @@ pub(crate) fn break_english_text(text: &str) -> Vec<String> {
     // Keep track of the last break that puts us below the max char limiit
     let mut candidate_break = None;
 
-    for nl in newline_indices {
+    // Make the last breakpoint the EOF, otherwise we'd just be counting span size between newlines
+    // (leaving out the span between the final newline and EOF)
+    let eof = text.len();
+    for cur_break in newline_indices.chain(iter::once(eof)) {
         let last_break = breaks.last().unwrap_or(&0);
 
         // If we could reasonably break here, save it as a candidate
-        if nl - last_break <= MAX_CHARS_PER_REQUEST {
-            candidate_break = Some(nl);
+        if cur_break - last_break <= MAX_CHARS_PER_REQUEST {
+            candidate_break = Some(cur_break);
         } else {
             // If we cannot break here, try to break at the last candidate. If there was none, then
             // we cannot break.
             match candidate_break {
                 Some(b) => breaks.push(b),
-                None => panic!("Could not find a sufficiently short paragraph to break"),
+                None => bail!("Could not find a sufficiently short paragraph to break"),
             }
         }
     }
 
-    split_at_multi(text, &breaks)
+    // One last check: make sure that [last newline, EOF] isn't too big. There's nothing we can do
+    // about that except error
+    let last_newline = text.rfind("\n").unwrap_or(0);
+    if eof - last_newline > MAX_CHARS_PER_REQUEST {
+        bail!("Final text span is unbreakable");
+    }
+
+    Ok(split_at_multi(text, &breaks))
 }

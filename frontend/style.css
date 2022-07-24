@@ -2,7 +2,7 @@
  * Some general styling
  */
 
-*:focus {
+*:focus-visible {
     outline: 2px solid #d71ef7;
 }
 

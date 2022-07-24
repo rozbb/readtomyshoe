@@ -138,72 +138,65 @@ pub(crate) async fn tts(
     Ok(final_mp3)
 }
 
-/// Splits the given str at all the specified indices. Also removes the first character of the
-/// all but the first split, since it's just punctuation.
-fn split_at_multi<'a>(mut text: &'a str, indices: &[usize]) -> Vec<&'a str> {
-    let mut slices = Vec::new();
-    let mut last_idx = 0;
+// Helper function that finds the next index i of the delimiter in the text such that txt[0, i]
+// is below the chunk limit. If no such i is found, then the first occurance of the delimiter
+// is returned (and text[0, i] is too big). If no delimiter occurs at all, txt.len() is
+// returned.
+fn next_break(text: &str, delim: char, max_chunk_size: usize) -> usize {
+    // Keep track of the last break that keeps us under the chunk size limit
+    let mut last_candidate_break = None;
 
-    for &idx in indices {
-        // Split at the specified point and save the slice
-        let (slice, rest) = text.split_at(idx - last_idx);
-        slices.push(slice);
+    // Find all the delimiters
+    let delim_indices = text.match_indices(delim).map(|(i, _)| i);
 
-        // Update the running slice and pos
-        last_idx = idx;
-        // Strip the leading punctuation. This happens after the first split. This shifts all the
-        // indices down by 1
-        //text = &rest[1..];
-        text = rest;
+    // Make the last breakpoint the EOF, otherwise we'd just be counting span size between
+    // delims (leaving out the span between the final delim and EOF)
+    let eof = text.len();
+
+    for cur_break in delim_indices.chain(iter::once(eof)) {
+        if cur_break != eof {
+            assert_eq!(text.split_at(cur_break).1.chars().next().unwrap(), delim);
+        }
+        if cur_break <= max_chunk_size {
+            last_candidate_break = Some(cur_break);
+        } else {
+            // The current break puts us over the chunk limit. Split at the last break if
+            // possible.
+            return last_candidate_break.unwrap_or(cur_break);
+        }
     }
 
-    // Push the remaining slice
-    slices.push(text);
-    slices
+    // If we made it to the end, then the text is now small enough to be a chunk in itself, and
+    // we're done.
+    return eof;
 }
 
 /// Attempts to break the given text into chunks of size at most `max_chunk_size`, making chunks as
 /// large as possible. The only allowed break point is `delim` characters. This is best-effort,
 /// meaning that there may be chunks returned which exceed `max_chunk_size`.
-pub(crate) fn break_greedily_at_delim(text: &str, delim: char, max_chunk_size: usize) -> Vec<&str> {
-    let mut breaks = Vec::new();
+pub(crate) fn break_greedily_at_delim(
+    mut text: &str,
+    delim: char,
+    max_chunk_size: usize,
+) -> Vec<&str> {
+    let mut chunks = Vec::new();
 
-    // Find all the delimiters
-    let delim_indices = text.match_indices(delim).map(|(i, _)| i);
+    while !text.is_empty() {
+        // While the text is not fully chunked, find the next break and break it up.
+        let b = next_break(text, delim, max_chunk_size);
+        let (chunk, mut rest) = text.split_at(b);
 
-    // Keep track of the last break that we haven't chosen
-    let mut last_candidate_break = None;
-
-    // Make the last breakpoint the EOF, otherwise we'd just be counting span size between delims
-    // (leaving out the span between the final delim and EOF)
-    let eof = text.len();
-    for cur_break in delim_indices.chain(iter::once(eof)) {
-        let last_break = breaks.last().unwrap_or(&0);
-
-        if cur_break - last_break <= max_chunk_size {
-            last_candidate_break = Some(cur_break);
-        } else {
-            // If we cannot break here, try to break at the last candidate. If there was none, then
-            // we cannot break.
-            match last_candidate_break {
-                Some(b) => {
-                    breaks.push(b);
-                    last_candidate_break = Some(cur_break);
-                }
-                None => {
-                    // This chunk is too big, but we can't do anything about it. Add a break right
-                    // here (unless it's the end of the text)
-                    if cur_break != eof {
-                        breaks.push(cur_break);
-                        // Clear the candidate break. Next break has to be after cur_break
-                        last_candidate_break = None;
-                    }
-                }
-            }
+        // Strip the leading punctuation off of the remainder of the text
+        if rest.chars().nth(0) == Some(delim) {
+            rest = &rest[1..];
         }
+
+        // Save the chunk and truncate the text
+        chunks.push(chunk);
+        text = rest;
     }
 
-    split_at_multi(text, &breaks)
+    chunks
 }
 
 /// Attempts to break the given text into chunks of size at most `max_chunk_size`, making chunks as
@@ -279,25 +272,30 @@ fn text_breaking() {
     let chunk_size = 220;
     let chunks = break_english_text(text, chunk_size).unwrap();
 
-    // Make sure the chunk sizes add up the the total text size
-    assert_eq!(chunks.iter().map(|c| c.len()).sum::<usize>(), text.len());
+    // Make sure the chunk sizes add up the the total text size, minus the delimiters which were
+    // deleted (there's chunks.len() - 1 deleted delimiters).
+    assert_eq!(
+        chunks.iter().map(|c| c.len()).sum::<usize>(),
+        text.len() - (chunks.len() - 1)
+    );
 
-    // Make sure the chunks are nonempty and don't exceed the chunk_size
+    // Make sure the chunks are nontrivial and don't exceed the chunk_size
     for chunk in chunks {
-        assert!(chunk.len() > 0);
+        assert!(chunk.len() > 1);
         assert!(chunk.len() <= chunk_size);
     }
 
-    let short_text = "\
+    //
+    // Test for a short text sample
+    //
+
+    let text = "\
         Mr James Duffy lived in Chapelizod because he wished to live as far as possible from the \
         city of which he was a citizen and because he found all the other suburbs of Dublin mean, \
         modern and pretentious.\
     ";
-    let chunks = break_english_text(short_text, chunk_size).unwrap();
+    let chunks = break_english_text(text, chunk_size).unwrap();
+    // Make sure there's just one chunk and it's the length of the whole text
     assert_eq!(chunks.len(), 1);
-    // Make sure the chunk sizes add up the the total text size
-    assert_eq!(
-        chunks.iter().map(|c| c.len()).sum::<usize>(),
-        short_text.len()
-    );
+    assert_eq!(chunks[0].len(), text.len());
 }

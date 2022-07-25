@@ -91,18 +91,31 @@ The app will start at `https://localhost:8080` by default. **The default behavio
 
 An incomplete to-do list, roughly in order of most important to least important:
 
-- [ ] Save current article, playback position, and speed
-- [ ] Write an accessible progress notifs for adding to queue, and error notifs for fetch and what not
-- [ ] Implement "next track" functionality with queue
+- [ ] Make playqueue reset time if the article is done(?)
+- [ ] Add an archive feature for articles whose audio has been pruned
+- [ ] Fix mediasession breaking on play/pause
+- [ ] Write prevtrack and nexttrack mediasession actions
+- [ ] Make filenames safe. Filenames should be alphanumeric and end with the hash of contents. Put title and URL in ID3 metadata. And when serving the file list, cache the metadata so we don't open all the files every call. Subpoint: use a filesystem watcher to update the metadata, and use Last-Modified-Since to save bandwidth
+- [ ] Write more accessible progress notifs for adding to queue, and error notifs for fetch and what not
 - [ ] Make the Dockerfile compatible with external volumes
-- [ ] Handle errors in article fetch better: delete temp files, implement retries to Google TTS
-- [ ] Save more metadata than article title: id, url, title, byline, text. Maybe store in the ID3v2 tags?
+- [ ] Implement retries for when Google TTS fails (this happens only occasionally)
 - [ ] Show more detailed progress in the add article view
-- [ ] Make whole site WCAG-compliant
-- [ ] Make queue order mutable
 - [ ] Fix caching in dev mode (the trouble is that assets are in `/assets/` in prod, but `/` in dev)
 - [ ] Implement login functionality and make per-user libraries
 - [ ] Write rate-limiting code for TTS service
+- [ ] The PWA reloads nonstop when the server is down. Service worker should return cache on fetch error
+- [ ] Fix issue where the Add Article doesn't complete if you close the page while it's working. Spawn a task in the background and wait on a channel.
+- [ ] Fix issue where an error adding an article still creates the article file and prevents future addition
+- [ ] Use `<audio>`'s onratechange event to set the playback combobox to the correct value
+- [ ] Make "fake play" (ie playing nothing before playing the real file to avoid Safari's weird anti-autoplay rules) not throw an error. It currently errors in every browser because it plays the empty blob, which is invalid.
+- [ ] Fix the ugly error on Safari private mode. I think this should just detect the error and say Safari private mode isn't supported
+- [ ] Add link to GitHub
+- [ ] Trafilatura errors currently appear as parsing errors, since trafilatura returns a 0 exit code even on error. Interpret JSON parsing errors as trafilatura extraction errors.
+- [ ] Support share target (no iOS support) https://web.dev/web-share-target/
+- [ ] Add article by PDF
+- [ ] Add article by batch URL
+- [ ] Detect and prevent duplicates in queue
+- [ ] Add login support for WSJ, NYT, Bloomberg, SEC EDGAR (needs [user agent](https://www.sec.gov/os/webmaster-faq#code-support))
 
 ## Licenses
 

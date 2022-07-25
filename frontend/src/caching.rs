@@ -421,7 +421,6 @@ pub(crate) async fn delete_article(id: &ArticleId) -> Result<(), AnyError> {
 
 /// Saves the article state to IndexedDB
 pub(crate) async fn save_article_state(state: &ArticleState) -> Result<(), AnyError> {
-    tracing::error!("Saving article state {:?}", state);
     let serialized_state = JsValue::from_serde(&state)?;
     table_put(ARTICLE_STATE_TABLE, &serialized_state).await?;
     Ok(())

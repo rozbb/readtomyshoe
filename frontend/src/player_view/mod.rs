@@ -78,10 +78,6 @@ fn set_playback_speed(speed: f64, audio_link: &Scope<Audio>) {
 /// global state. `periodic` tells the function whether this was called by a timer or by a user
 /// action. This is passed on to the player later.
 fn trigger_save(periodic: bool, player: &Scope<Player>) {
-    // Update the MediaSession state while we're here. This should lessen discontinuities due to
-    // difference in true playback speed and displayed playback speed.
-    MediaSessionState::update();
-
     // Get the elapsed audio time and send to player state
     let elapsed = GlobalAudio::get_elapsed();
     player.send_message(PlayerMsg::SaveState { elapsed, periodic });

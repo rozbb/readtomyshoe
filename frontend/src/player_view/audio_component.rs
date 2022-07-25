@@ -34,11 +34,15 @@ impl Default for MediaSessionCallbacks {
     /// cause the following controls to be displayed on the lockscreen: play/pause, jump back, jump
     /// forward, scrobble.
     fn default() -> Self {
-        let _play_action = Closure::new(|| spawn_local(async move { GlobalAudio::play().await }));
-        let _pause_action = Closure::new(GlobalAudio::pause);
-        let _jump_forward_action = Closure::new(GlobalAudio::jump_forward);
-        let _jump_backward_action = Closure::new(GlobalAudio::jump_backward);
-        let _seek_to_action = Closure::new(MediaSessionState::seek_to);
+        let _play_action = Closure::new(|| {
+            spawn_local(async move {
+                GlobalAudio::play().await;
+            })
+        });
+        let _pause_action = Closure::new(|| GlobalAudio::pause());
+        let _jump_forward_action = Closure::new(|| GlobalAudio::jump_forward());
+        let _jump_backward_action = Closure::new(|| GlobalAudio::jump_backward());
+        let _seek_to_action = Closure::new(|evt| MediaSessionState::seek_to(evt));
 
         let media_session = get_media_session();
 
@@ -77,38 +81,6 @@ impl Default for MediaSessionCallbacks {
 pub struct MediaSessionState;
 
 impl MediaSessionState {
-    /// Updates the MediaSession's scrubber to the current elapsed track time
-    pub fn update() {
-        let audio_elem = GlobalAudio::get_elem();
-
-        // Get the current position, duration, and playback rate from the <audio> element
-        let pos = audio_elem.current_time();
-        let dur = audio_elem.duration();
-        let rate = audio_elem.playback_rate();
-
-        // If any of the above values are not in the range [0, ∞), then the player is not configured.
-        // Do not set anything, lest an panic occur
-        if ![pos, dur, rate]
-            .into_iter()
-            .all(|x| x.is_finite() && x >= 0.0)
-        {
-            return;
-        }
-
-        // Update the position state
-        let mut playback_state = MediaPositionState::new();
-        playback_state
-            .position(pos)
-            .duration(dur)
-            .playback_rate(rate);
-
-        // Now give the above metadata to the media session
-        let media_session = get_media_session();
-        media_session.set_position_state_with_state(&playback_state);
-
-        tracing::debug!("Updated MediaSession state");
-    }
-
     /// Clears the metadata of the session. This means nothing is playing
     fn clear() {
         let media_session = get_media_session();
@@ -410,14 +382,10 @@ impl Component for Audio {
 
             AudioMsg::JumpForward => {
                 GlobalAudio::jump_forward();
-                // The scrubber changed position. Update the MediaSession
-                MediaSessionState::update();
             }
 
             AudioMsg::JumpBackward => {
                 GlobalAudio::jump_backward();
-                // The scrubber changed position. Update the MediaSession
-                MediaSessionState::update();
             }
 
             AudioMsg::_SetElapsed(elapsed) => {
@@ -432,13 +400,10 @@ impl Component for Audio {
 
                 // Seek to the desired position and update the MediaSession scrubber
                 GlobalAudio::seek(elapsed);
-                MediaSessionState::update();
             }
 
             AudioMsg::SetPlaybackSpeed(speed) => {
                 GlobalAudio::set_playback_speed(speed);
-                // The speed changed. Update the MediaSession
-                MediaSessionState::update();
             }
 
             AudioMsg::Stop => {

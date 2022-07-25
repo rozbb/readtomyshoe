@@ -3,7 +3,7 @@ use crate::WeakComponentLink;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{
-    Blob, HtmlAudioElement, MediaMetadata, MediaPositionState, MediaSession, MediaSessionAction,
+    Blob, HtmlAudioElement, MediaMetadata, MediaSession, MediaSessionAction,
     MediaSessionActionDetails, Url,
 };
 use yew::prelude::*;
@@ -11,8 +11,8 @@ use yew::prelude::*;
 /// The ID of the unique audio element the page
 pub const AUDIO_ELEM_ID: &str = "mainAudio";
 
-// Always jump by 10sec
-const JUMP_SIZE: f64 = 10.0;
+// If an audio jump offset isn't set, jump by 10 seconds
+const DEFAULT_JUMP_SIZE: f64 = 10.0;
 
 /// Helper function to retrieve the MediaSession API
 fn get_media_session() -> MediaSession {
@@ -24,8 +24,8 @@ fn get_media_session() -> MediaSession {
 pub struct MediaSessionCallbacks {
     _play_action: Closure<dyn Fn()>,
     _pause_action: Closure<dyn Fn()>,
-    _jump_forward_action: Closure<dyn Fn()>,
-    _jump_backward_action: Closure<dyn Fn()>,
+    _jump_forward_action: Closure<dyn Fn(MediaSessionActionDetails)>,
+    _jump_backward_action: Closure<dyn Fn(MediaSessionActionDetails)>,
     _seek_to_action: Closure<dyn Fn(MediaSessionActionDetails)>,
 }
 
@@ -40,9 +40,9 @@ impl Default for MediaSessionCallbacks {
             })
         });
         let _pause_action = Closure::new(|| GlobalAudio::pause());
-        let _jump_forward_action = Closure::new(|| GlobalAudio::jump_forward());
-        let _jump_backward_action = Closure::new(|| GlobalAudio::jump_backward());
-        let _seek_to_action = Closure::new(|evt| MediaSessionState::seek_to(evt));
+        let _jump_forward_action = Closure::new(GlobalAudio::jump_forward);
+        let _jump_backward_action = Closure::new(GlobalAudio::jump_backward);
+        let _seek_to_action = Closure::new(MediaSessionState::seek_to);
 
         let media_session = get_media_session();
 
@@ -170,15 +170,33 @@ impl GlobalAudio {
     }
 
     /// Jumps forward by JUMP_SIZE seconds
-    pub fn jump_forward() {
-        tracing::debug!("Jumping forward",);
-        GlobalAudio::jump_offset(JUMP_SIZE);
+    pub fn jump_forward(details: MediaSessionActionDetails) {
+        let seek_offset =
+            js_sys::Reflect::get(&details, &JsValue::from_str("seekOffset")).map(|t| t.as_f64());
+
+        // If the offset isn't given, use the default jump size
+        let seek_offset = match seek_offset {
+            Ok(Some(off)) => off,
+            _ => -DEFAULT_JUMP_SIZE,
+        };
+
+        tracing::trace!("Jumping forward {} seconds", seek_offset);
+        GlobalAudio::jump_offset(DEFAULT_JUMP_SIZE);
     }
 
     /// Jumps backward by JUMP_SIZE seconds
-    pub fn jump_backward() {
-        tracing::debug!("Jumping backward",);
-        GlobalAudio::jump_offset(-JUMP_SIZE);
+    pub fn jump_backward(details: MediaSessionActionDetails) {
+        let seek_offset =
+            js_sys::Reflect::get(&details, &JsValue::from_str("seekOffset")).map(|t| t.as_f64());
+
+        // If the offset isn't given, use the default jump size
+        let seek_offset = match seek_offset {
+            Ok(Some(off)) => off,
+            _ => -DEFAULT_JUMP_SIZE,
+        };
+
+        tracing::trace!("Jumping backward {} seconds", -seek_offset);
+        GlobalAudio::jump_offset(seek_offset);
     }
 
     // A helper function that plays empty audio. This is necessary because of a quirk in Safari that
@@ -381,11 +399,11 @@ impl Component for Audio {
             }
 
             AudioMsg::JumpForward => {
-                GlobalAudio::jump_forward();
+                GlobalAudio::jump_offset(DEFAULT_JUMP_SIZE);
             }
 
             AudioMsg::JumpBackward => {
-                GlobalAudio::jump_backward();
+                GlobalAudio::jump_offset(-DEFAULT_JUMP_SIZE);
             }
 
             AudioMsg::_SetElapsed(elapsed) => {

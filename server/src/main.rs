@@ -15,7 +15,6 @@ use axum::{
     routing::{get, get_service},
     Router,
 };
-use axum_extra::routing::SpaRouter;
 use clap::Parser;
 use tower::ServiceBuilder;
 use tower_http::{

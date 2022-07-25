@@ -1,7 +1,7 @@
 mod audio_component;
 
 use crate::{caching, queue_view::ArticleId, utils, WeakComponentLink};
-use audio_component::{Audio, AudioMsg, GlobalAudio, MediaSessionState};
+use audio_component::{Audio, AudioMsg, GlobalAudio};
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::{closure::Closure, JsCast};

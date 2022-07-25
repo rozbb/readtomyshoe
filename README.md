@@ -1,5 +1,5 @@
 <p align="center">
-    <img width="300" height="300" src="logos/rtms-color-512x512.png" alt="ReadToMyShoe logo">
+    <img width="300" height="300" src="logos/rtms-color-512x512.png" alt="ReadToMyShoe logo: A sneaker wearing a headset with a microphone">
 </p>
 
 # ReadToMyShoe

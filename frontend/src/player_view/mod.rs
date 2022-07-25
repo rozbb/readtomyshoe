@@ -17,8 +17,9 @@ const PLAYER_STATE_SAVE_FREQ: i32 = 10000;
 /// All the playback speeds we support
 const PLAYBACK_SPEEDS: &[f64] = &[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0];
 
-/// Loads the given article and its playback state, and sets the <audio>'s src to the MP3 blob
-async fn prepare_for_play(id: &ArticleId, audio_link: &Scope<Audio>) {
+/// Loads the given article and its playback state, and sets the <audio>'s src to the MP3 blob.
+/// Returns the desired elapsed time for the article.
+async fn prepare_for_play(id: &ArticleId, audio_link: &Scope<Audio>) -> f64 {
     // Load the article state and set the elapsed time.
     let elapsed = match caching::load_article_state(&id).await {
         Ok(state) => state.elapsed,
@@ -40,9 +41,10 @@ async fn prepare_for_play(id: &ArticleId, audio_link: &Scope<Audio>) {
         }
         Err(e) => {
             tracing::error!("Couldn't load article {}: {:?}", id.0, e);
-            return;
         }
     }
+
+    elapsed
 }
 
 /// Returns the combobox used to select playback speed
@@ -119,7 +121,7 @@ pub enum PlayerMsg {
 }
 
 /// Holds the elapsed time in a given article
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ArticleState {
     /// The ID of the referenced article
     id: ArticleId,
@@ -179,12 +181,18 @@ impl Component for Player {
                     tracing::trace!("Did a fake play");
 
                     // Load the article and play it
-                    prepare_for_play(&id, &audio_link).await;
+                    let new_elapsed = prepare_for_play(&id, &audio_link).await;
                     audio_link.send_message(AudioMsg::Play);
 
-                    // Save the state to disk. This is an ad-hoc (ie non-periodic) save
+                    // Save the new article with the new elapsed time to disk. This isn't done
+                    // through trigger_save because it might be the case at this point that the
+                    // canplay event has not yet fired on the AudioComponent, so the elapsed time
+                    // is 0 instead of the desired elapsed time. So save the new value manually.
                     let periodic = false;
-                    trigger_save(periodic, &player_link);
+                    player_link.send_message(PlayerMsg::SaveState {
+                        elapsed: new_elapsed,
+                        periodic,
+                    });
                 });
 
                 // The state was updated. Refresh the player view
@@ -232,7 +240,9 @@ impl Component for Player {
 
                 // Load up the article specified by now_playing
                 if let Some(handle) = self.state.now_playing.clone() {
-                    spawn_local(async move { prepare_for_play(&handle, &audio_link).await });
+                    spawn_local(async move {
+                        prepare_for_play(&handle, &audio_link).await;
+                    });
                 }
 
                 // The state was updated. Refresh the player view
@@ -298,7 +308,7 @@ impl Component for Player {
                     tracing::trace!("successfully restored player from save");
                     link.send_message(PlayerMsg::SetState(state));
                 }
-                Err(e) => tracing::error!("could not load player state: {:?}", e),
+                Err(e) => tracing::error!("Could not load player state: {:?}", e),
             }
         });
 

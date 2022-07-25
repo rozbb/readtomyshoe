@@ -24,9 +24,11 @@ fn get_media_session() -> MediaSession {
 pub struct MediaSessionCallbacks {
     _play_action: Closure<dyn Fn()>,
     _pause_action: Closure<dyn Fn()>,
+    _seek_to_action: Closure<dyn Fn(MediaSessionActionDetails)>,
     _jump_forward_action: Closure<dyn Fn(MediaSessionActionDetails)>,
     _jump_backward_action: Closure<dyn Fn(MediaSessionActionDetails)>,
-    _seek_to_action: Closure<dyn Fn(MediaSessionActionDetails)>,
+    _next_track_action: Closure<dyn Fn()>,
+    _prev_track_action: Closure<dyn Fn()>,
 }
 
 impl Default for MediaSessionCallbacks {
@@ -40,9 +42,11 @@ impl Default for MediaSessionCallbacks {
             })
         });
         let _pause_action = Closure::new(|| GlobalAudio::pause());
+        let _seek_to_action = Closure::new(MediaSessionState::seek_to);
         let _jump_forward_action = Closure::new(GlobalAudio::jump_forward);
         let _jump_backward_action = Closure::new(GlobalAudio::jump_backward);
-        let _seek_to_action = Closure::new(MediaSessionState::seek_to);
+        let _next_track_action = Closure::new(GlobalAudio::tmp_next_track);
+        let _prev_track_action = Closure::new(GlobalAudio::tmp_next_track);
 
         let media_session = get_media_session();
 
@@ -56,6 +60,10 @@ impl Default for MediaSessionCallbacks {
             Some(_pause_action.as_ref().unchecked_ref()),
         );
         media_session.set_action_handler(
+            MediaSessionAction::Seekto,
+            Some(_seek_to_action.as_ref().unchecked_ref()),
+        );
+        media_session.set_action_handler(
             MediaSessionAction::Seekforward,
             Some(_jump_forward_action.as_ref().unchecked_ref()),
         );
@@ -64,16 +72,22 @@ impl Default for MediaSessionCallbacks {
             Some(_jump_backward_action.as_ref().unchecked_ref()),
         );
         media_session.set_action_handler(
-            MediaSessionAction::Seekto,
-            Some(_seek_to_action.as_ref().unchecked_ref()),
+            MediaSessionAction::Nexttrack,
+            Some(_next_track_action.as_ref().unchecked_ref()),
+        );
+        media_session.set_action_handler(
+            MediaSessionAction::Previoustrack,
+            Some(_prev_track_action.as_ref().unchecked_ref()),
         );
 
         MediaSessionCallbacks {
             _play_action,
             _pause_action,
+            _seek_to_action,
             _jump_forward_action,
             _jump_backward_action,
-            _seek_to_action,
+            _next_track_action,
+            _prev_track_action,
         }
     }
 }
@@ -197,6 +211,11 @@ impl GlobalAudio {
 
         tracing::trace!("Jumping backward {} seconds", -seek_offset);
         GlobalAudio::jump_offset(seek_offset);
+    }
+
+    /// Jumps backward by JUMP_SIZE seconds
+    pub fn tmp_next_track() {
+        GlobalAudio::jump_offset(-DEFAULT_JUMP_SIZE);
     }
 
     // A helper function that plays empty audio. This is necessary because of a quirk in Safari that

@@ -1,4 +1,5 @@
 mod audio_component;
+mod media_session;
 
 use crate::{caching, queue_view::ArticleId, utils, WeakComponentLink};
 use audio_component::{Audio, AudioMsg, GlobalAudio};

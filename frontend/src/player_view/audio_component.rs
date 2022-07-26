@@ -1,11 +1,9 @@
+use super::media_session::{MediaSessionCallbacks, MediaSessionState};
 use crate::WeakComponentLink;
 
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
-use web_sys::{
-    Blob, HtmlAudioElement, MediaMetadata, MediaSession, MediaSessionAction,
-    MediaSessionActionDetails, Url,
-};
+use web_sys::{Blob, HtmlAudioElement, MediaSessionActionDetails, Url};
 use yew::prelude::*;
 
 /// The ID of the unique audio element the page
@@ -13,133 +11,6 @@ pub const AUDIO_ELEM_ID: &str = "mainAudio";
 
 // If an audio jump offset isn't set, jump by 10 seconds
 const DEFAULT_JUMP_SIZE: f64 = 10.0;
-
-/// Helper function to retrieve the MediaSession API
-fn get_media_session() -> MediaSession {
-    gloo_utils::window().navigator().media_session()
-}
-
-/// These are the callbacks the browser calls when the user performs a MediaSession operation like
-/// seeking forward or skipping a track
-pub struct MediaSessionCallbacks {
-    _play_action: Closure<dyn Fn()>,
-    _pause_action: Closure<dyn Fn()>,
-    _seek_to_action: Closure<dyn Fn(MediaSessionActionDetails)>,
-    _jump_forward_action: Closure<dyn Fn(MediaSessionActionDetails)>,
-    _jump_backward_action: Closure<dyn Fn(MediaSessionActionDetails)>,
-    _next_track_action: Closure<dyn Fn()>,
-    _prev_track_action: Closure<dyn Fn()>,
-}
-
-impl Default for MediaSessionCallbacks {
-    /// Sets all the callbacks necessary for the MediaSession to be usable. On an iPhone, this will
-    /// cause the following controls to be displayed on the lockscreen: play/pause, jump back, jump
-    /// forward, scrobble.
-    fn default() -> Self {
-        let _play_action = Closure::new(|| {
-            spawn_local(async move {
-                GlobalAudio::play().await;
-            })
-        });
-        let _pause_action = Closure::new(|| GlobalAudio::pause());
-        let _seek_to_action = Closure::new(MediaSessionState::seek_to);
-        let _jump_forward_action = Closure::new(GlobalAudio::jump_forward);
-        let _jump_backward_action = Closure::new(GlobalAudio::jump_backward);
-        let _next_track_action = Closure::new(GlobalAudio::tmp_next_track);
-        let _prev_track_action = Closure::new(GlobalAudio::tmp_next_track);
-
-        let media_session = get_media_session();
-
-        // Set all the callbacks
-        media_session.set_action_handler(
-            MediaSessionAction::Play,
-            Some(_play_action.as_ref().unchecked_ref()),
-        );
-        media_session.set_action_handler(
-            MediaSessionAction::Pause,
-            Some(_pause_action.as_ref().unchecked_ref()),
-        );
-        media_session.set_action_handler(
-            MediaSessionAction::Seekto,
-            Some(_seek_to_action.as_ref().unchecked_ref()),
-        );
-        media_session.set_action_handler(
-            MediaSessionAction::Seekforward,
-            Some(_jump_forward_action.as_ref().unchecked_ref()),
-        );
-        media_session.set_action_handler(
-            MediaSessionAction::Seekbackward,
-            Some(_jump_backward_action.as_ref().unchecked_ref()),
-        );
-        media_session.set_action_handler(
-            MediaSessionAction::Nexttrack,
-            Some(_next_track_action.as_ref().unchecked_ref()),
-        );
-        media_session.set_action_handler(
-            MediaSessionAction::Previoustrack,
-            Some(_prev_track_action.as_ref().unchecked_ref()),
-        );
-
-        MediaSessionCallbacks {
-            _play_action,
-            _pause_action,
-            _seek_to_action,
-            _jump_forward_action,
-            _jump_backward_action,
-            _next_track_action,
-            _prev_track_action,
-        }
-    }
-}
-
-pub struct MediaSessionState;
-
-impl MediaSessionState {
-    /// Clears the metadata of the session. This means nothing is playing
-    fn clear() {
-        let media_session = get_media_session();
-        media_session.set_metadata(None);
-    }
-
-    /// Sets the MediaSession title of the currently playing track
-    fn set_title(title: &str) {
-        let media_session = get_media_session();
-
-        // Only metadata is title
-        let metadata = MediaMetadata::new().unwrap();
-        metadata.set_title(&title);
-        media_session.set_metadata(Some(&metadata));
-    }
-
-    // TODO: use wasm_bindgen generated getters to get fields from these dicts. This is blocked on
-    // https://github.com/rustwasm/wasm-bindgen/issues/2921
-    /// Callback for the "seekto" MediaSession action
-    fn seek_to(evt: MediaSessionActionDetails) {
-        let fast_seek =
-            js_sys::Reflect::get(&evt, &JsValue::from_str("fastSeek")).map(|t| t.as_bool());
-        let seek_time =
-            js_sys::Reflect::get(&evt, &JsValue::from_str("seekTime")).map(|t| t.as_f64());
-        let seek_offset =
-            js_sys::Reflect::get(&evt, &JsValue::from_str("seekOffset")).map(|t| t.as_f64());
-
-        tracing::debug!(
-            "Seeking to offset {:?} or time {:?}",
-            seek_offset,
-            seek_time
-        );
-
-        // Seek to the specified time, if defined
-        if let Ok(Some(time)) = seek_time {
-            // If "fast seek" is set, us that method
-            match fast_seek {
-                Ok(Some(true)) => GlobalAudio::fast_seek(time),
-                _ => GlobalAudio::seek(time),
-            }
-        } else if let Ok(Some(off)) = seek_offset {
-            GlobalAudio::jump_offset(off);
-        }
-    }
-}
 
 /// Holds operations we can do on the unique <audio> element on this page
 pub struct GlobalAudio;
@@ -211,11 +82,6 @@ impl GlobalAudio {
 
         tracing::trace!("Jumping backward {} seconds", -seek_offset);
         GlobalAudio::jump_offset(seek_offset);
-    }
-
-    /// Jumps backward by JUMP_SIZE seconds
-    pub fn tmp_next_track() {
-        GlobalAudio::jump_offset(-DEFAULT_JUMP_SIZE);
     }
 
     // A helper function that plays empty audio. This is necessary because of a quirk in Safari that

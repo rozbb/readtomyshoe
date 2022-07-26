@@ -2,7 +2,12 @@ use super::audio_component::GlobalAudio;
 
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{MediaMetadata, MediaSession, MediaSessionAction, MediaSessionActionDetails};
+use web_sys::{
+    MediaImage, MediaMetadata, MediaSession, MediaSessionAction, MediaSessionActionDetails,
+};
+
+/// Use the RTMS logo as the album image
+const ALBUM_IMAGE_URL: &str = "/assets/rtms-color-512x512.png";
 
 /// Helper function to retrieve the MediaSession API
 fn get_media_session() -> MediaSession {
@@ -98,9 +103,18 @@ impl MediaSessionState {
     pub fn set_title(title: &str) {
         let media_session = get_media_session();
 
-        // Only metadata is title
+        // Set the title
         let metadata = MediaMetadata::new().unwrap();
         metadata.set_title(&title);
+
+        // Set the artwork. It's an array consisting of just 1 image
+        let artwork = js_sys::Array::new_with_length(1);
+        let mut image = MediaImage::new(ALBUM_IMAGE_URL);
+        image.sizes("any");
+        image.type_("image/png");
+        artwork.set(0, image.into());
+        metadata.set_artwork(&artwork);
+
         media_session.set_metadata(Some(&metadata));
     }
 

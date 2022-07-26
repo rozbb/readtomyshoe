@@ -8,6 +8,7 @@ const appShellFiles = [
     "/index.html",
     "/assets/rtms-color-32x32.png",
     "/assets/rtms-color-180x180.png",
+    "/assets/rtms-color-512x512.png",
     "/assets/readtomyshoe-frontend.js",
     "/assets/readtomyshoe-frontend_bg.wasm"
 ];

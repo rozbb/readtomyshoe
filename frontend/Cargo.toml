@@ -28,7 +28,7 @@ version = "0.3"
 features = [
     "HtmlSelectElement", "HtmlAudioElement", "Window", "Navigator", "MediaSession",
     "MediaPositionState", "MediaSessionAction", "MediaSessionActionDetails", "MediaMetadata",
-    "ServiceWorkerContainer", "RegistrationOptions", "IdbFactory", "IdbOpenDbRequest",
+    "MediaImage", "ServiceWorkerContainer", "RegistrationOptions", "IdbFactory", "IdbOpenDbRequest",
     "IdbDatabase", "IdbObjectStore", "IdbObjectStoreParameters", "IdbTransaction",
     "IdbTransactionMode", "ReadableStream", "PageTransitionEvent",
 ]

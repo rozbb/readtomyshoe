@@ -62,11 +62,11 @@ impl GlobalAudio {
         // If the offset isn't given, use the default jump size
         let seek_offset = match seek_offset {
             Ok(Some(off)) => off,
-            _ => -DEFAULT_JUMP_SIZE,
+            _ => DEFAULT_JUMP_SIZE,
         };
 
         tracing::trace!("Jumping forward {} seconds", seek_offset);
-        GlobalAudio::jump_offset(DEFAULT_JUMP_SIZE);
+        GlobalAudio::jump_offset(seek_offset);
     }
 
     /// Jumps backward by JUMP_SIZE seconds
@@ -77,11 +77,11 @@ impl GlobalAudio {
         // If the offset isn't given, use the default jump size
         let seek_offset = match seek_offset {
             Ok(Some(off)) => off,
-            _ => -DEFAULT_JUMP_SIZE,
+            _ => DEFAULT_JUMP_SIZE,
         };
 
-        tracing::trace!("Jumping backward {} seconds", -seek_offset);
-        GlobalAudio::jump_offset(seek_offset);
+        tracing::trace!("Jumping backward {} seconds", seek_offset);
+        GlobalAudio::jump_offset(-seek_offset);
     }
 
     // A helper function that plays empty audio. This is necessary because of a quirk in Safari that

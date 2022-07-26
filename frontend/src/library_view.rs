@@ -245,6 +245,8 @@ impl Component for Library {
                     <ul role="list" aria-label="Library catalog">
                         { rendered_list }
                     </ul>
+                <p id="libErrors" style={ "color: red;" } aria-live="assertive" aria-role="alert" title="errors">
+                </p>
                 </section>
             }
         } else {

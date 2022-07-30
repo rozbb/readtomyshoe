@@ -347,6 +347,11 @@ impl Component for Player {
             .as_ref()
             .unwrap()
             .callback(|_| PlayerMsg::UpdatePlaybackSpeed);
+        // Callback for previous and next track
+        let prevtrack_cb = Callback::from(move |_: MouseEvent| {
+            GlobalAudio::seek(0.0);
+        });
+        let nexttrack_cb = Callback::from(move |_: MouseEvent| {});
 
         let playback_speed_selector = render_playback_speed_selector(playback_speed_cb);
         let now_playing_str = self
@@ -376,6 +381,21 @@ impl Component for Player {
                         onclick={jump_forward_cb}
                     >
                     { "↪️" }
+                    </button>
+                    <br />
+                    <button
+                        aria-label="Go to beginning. Double tap for previous article"
+                        title="Go to beginning. Double tap for previous article"
+                        onclick={prevtrack_cb}
+                    >
+                        { "⏮️" }
+                    </button>
+                    <button
+                        aria-label="Next article"
+                        title="Next article"
+                        onclick={nexttrack_cb}
+                    >
+                    { "⏭️" }
                     </button>
 
                     <div class="playbackSpeedSection">

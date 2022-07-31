@@ -134,7 +134,7 @@ fn header() -> Html {
                         "}</p></li>
                         <li><p><strong>{"Control from lockscreen: " }</strong>{"
                             ReadToMyShoe lets you control audio playback from whatever media
-                            controls you have on your phone. On the iPhone, for example, you can
+                            controls you have on your device. On the iPhone, for example, you can
                             play, pause, and jump from Control Center, and even from the lockscreen.
                         "}</p></li>
                     </ul>

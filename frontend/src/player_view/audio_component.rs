@@ -333,7 +333,7 @@ impl Component for Audio {
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
         html! {
-            <audio controls=false style={ "display: block;" } id={AUDIO_ELEM_ID}>
+            <audio controls=true style={ "display: block;" } id={AUDIO_ELEM_ID}>
                 { "Your browser does not support the <code>audio</code> element" }
             </audio>
         }

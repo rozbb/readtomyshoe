@@ -134,7 +134,8 @@ impl Component for Queue {
                 let now_playing_idx = self.entries.iter().position(|x| x.id == article_id);
                 // Get the ID of the next track, if it exist
                 let next_track_id = now_playing_idx
-                    .and_then(|i| self.entries.get(i + 1))
+                    .and_then(|i| i.checked_sub(1))
+                    .and_then(|i| self.entries.get(i))
                     .map(|e| e.id.clone());
 
                 // If the ID exists, play it
@@ -147,8 +148,7 @@ impl Component for Queue {
                 let now_playing_idx = self.entries.iter().position(|x| x.id == article_id);
                 // Get the ID of the prev track, if it exist
                 let prev_track_id = now_playing_idx
-                    .and_then(|i| i.checked_sub(1))
-                    .and_then(|i| self.entries.get(i))
+                    .and_then(|i| self.entries.get(i + 1))
                     .map(|e| e.id.clone());
 
                 // If the ID exists, play it

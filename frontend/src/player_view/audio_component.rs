@@ -37,6 +37,12 @@ impl GlobalAudio {
         audio_elem.current_time()
     }
 
+    /// Gets the current playback speed
+    pub fn get_playback_speed() -> f64 {
+        let audio_elem = GlobalAudio::get_elem();
+        audio_elem.playback_rate()
+    }
+
     /// Fast-seeks to the specified time
     pub fn fast_seek(time: f64) {
         let audio_elem = GlobalAudio::get_elem();

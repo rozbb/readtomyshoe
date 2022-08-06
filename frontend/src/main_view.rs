@@ -74,7 +74,7 @@ impl Component for Main {
         html! {
             <>
                 { header() }
-                <Player {player_link} />
+                <Player {queue_link} {player_link} />
                 <Queue {queue_link} {player_link} />
                 <Library {queue_link} />
             </>

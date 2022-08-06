@@ -24,9 +24,16 @@ pub struct QueueEntry {
 }
 
 pub enum QueueMsg {
+    /// Adds the given entry to the queue
     Add(QueueEntry),
+    /// Deletes the entry at the given index
     Delete(usize),
+    /// Sets the queue contents. Used in loading from previous state
     SetQueue(Queue),
+    /// A message from the player asking to get the article that comes after the given one
+    PlayTrackAfter(ArticleId),
+    /// A message from the player asking to get the article that comes before the given one
+    PlayTrackBefore(ArticleId),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -88,18 +95,14 @@ impl Component for Queue {
     type Properties = Props;
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        let player_link = ctx.props().player_link.borrow().clone().unwrap();
         match msg {
             QueueMsg::Delete(idx) => {
                 // Remove the entry from the queue and delete the article from the cache
                 let entry = self.entries.remove(idx);
 
                 // Tell the player to stop playing this track if it's playing
-                ctx.props()
-                    .player_link
-                    .borrow()
-                    .clone()
-                    .unwrap()
-                    .send_message(PlayerMsg::StopIfPlaying(entry.id.clone()));
+                player_link.send_message(PlayerMsg::StopIfPlaying(entry.id.clone()));
 
                 // Save the queue
                 self.save();
@@ -125,6 +128,33 @@ impl Component for Queue {
             }
             QueueMsg::SetQueue(queue) => {
                 *self = queue;
+            }
+            QueueMsg::PlayTrackBefore(article_id) => {
+                // Find the article ID in the queue
+                let now_playing_idx = self.entries.iter().position(|x| x.id == article_id);
+                // Get the ID of the next track, if it exist
+                let next_track_id = now_playing_idx
+                    .and_then(|i| self.entries.get(i + 1))
+                    .map(|e| e.id.clone());
+
+                // If the ID exists, play it
+                if let Some(id) = next_track_id {
+                    player_link.send_message(PlayerMsg::Play(id.clone()));
+                }
+            }
+            QueueMsg::PlayTrackAfter(article_id) => {
+                // Find the article ID in the queue
+                let now_playing_idx = self.entries.iter().position(|x| x.id == article_id);
+                // Get the ID of the prev track, if it exist
+                let prev_track_id = now_playing_idx
+                    .and_then(|i| i.checked_sub(1))
+                    .and_then(|i| self.entries.get(i))
+                    .map(|e| e.id.clone());
+
+                // If the ID exists, play it
+                if let Some(id) = prev_track_id {
+                    player_link.send_message(PlayerMsg::Play(id.clone()));
+                }
             }
         }
 

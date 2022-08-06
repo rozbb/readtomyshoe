@@ -1,7 +1,11 @@
 mod audio_component;
 mod media_session;
 
-use crate::{caching, queue_view::ArticleId, utils, WeakComponentLink};
+use crate::{
+    caching,
+    queue_view::{ArticleId, Queue, QueueMsg},
+    utils, WeakComponentLink,
+};
 use audio_component::{Audio, AudioMsg, GlobalAudio};
 
 use serde::{Deserialize, Serialize};
@@ -88,6 +92,8 @@ fn trigger_save(periodic: bool, player: &Scope<Player>) {
 pub struct Props {
     /// A link to myself. We have to set this on creation
     pub player_link: WeakComponentLink<Player>,
+    /// A link to the Queue component
+    pub queue_link: WeakComponentLink<Queue>,
 }
 
 pub enum PlayerMsg {
@@ -322,9 +328,12 @@ impl Component for Player {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let player_link = &ctx.props().player_link;
+        let player_link = ctx.props().player_link.borrow().clone().unwrap();
 
-        // Callbacks for the left and right arrow buttons
+        //
+        // Callbacks for the jump backward and forward buttons
+        //
+
         let audio_link = self.audio_link.clone();
         let jump_forward_cb = Callback::from(move |_: MouseEvent| {
             audio_link
@@ -333,30 +342,60 @@ impl Component for Player {
                 .unwrap()
                 .send_message(AudioMsg::JumpForward)
         });
+
         let audio_link = self.audio_link.clone();
         let jump_backward_cb = Callback::from(move |_: MouseEvent| {
             audio_link
                 .borrow()
                 .as_ref()
                 .unwrap()
-                .send_message(AudioMsg::JumpBackward)
+                .send_message(AudioMsg::JumpForward)
         });
-        // Callback for the playback speed
-        let playback_speed_cb = player_link
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .callback(|_| PlayerMsg::UpdatePlaybackSpeed);
-        // Callback for previous and next track
-        let prevtrack_cb = Callback::from(move |_: MouseEvent| {
-            GlobalAudio::seek(0.0);
-        });
-        let nexttrack_cb = Callback::from(move |_: MouseEvent| {});
 
+        //
+        // Callbacks for the skip prev and next buttons
+        //
+
+        // When prevtrack is clicked, go to the beginning of the audio. If it's clicked twice
+        // within one second, i.e., double-clicked, then move to the previous track.
+        let now_playing = self.state.now_playing.clone();
+        let queue_link = ctx.props().queue_link.borrow().clone().unwrap();
+        let prevtrack_cb = Callback::from(move |_: MouseEvent| {
+            // If the real-world time since the start of the track has been more than 1 sec, then
+            // just seek to beginning. Real-world time accounts for playback speed.
+            let clock_time_since_trackstart =
+                GlobalAudio::get_elapsed() / GlobalAudio::get_playback_speed();
+            if clock_time_since_trackstart > 1.0 {
+                GlobalAudio::seek(0.0);
+            } else {
+                if let Some(ref id) = &now_playing {
+                    queue_link.send_message(QueueMsg::PlayTrackBefore(id.clone()))
+                }
+            }
+        });
+
+        // When nexttrack is clicked, move to the next track
+        let now_playing = self.state.now_playing.clone();
+        let queue_link = ctx.props().queue_link.borrow().clone().unwrap();
+        let nexttrack_cb = Callback::from(move |_: MouseEvent| {
+            if let Some(ref id) = &now_playing {
+                queue_link.send_message(QueueMsg::PlayTrackAfter(id.clone()))
+            }
+        });
+
+        //
+        // Callback for the playback speed
+        //
+
+        let playback_speed_cb = player_link.callback(|_| PlayerMsg::UpdatePlaybackSpeed);
+
+        //
+        // Set nowplaying
+        //
+
+        let now_playing = self.state.now_playing.clone();
         let playback_speed_selector = render_playback_speed_selector(playback_speed_cb);
-        let now_playing_str = self
-            .state
-            .now_playing
+        let now_playing_str = now_playing
             .as_ref()
             .map(|c| c.0.clone())
             .unwrap_or("[no article loaded]".to_string());

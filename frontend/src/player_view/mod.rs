@@ -7,6 +7,7 @@ use crate::{
     utils, WeakComponentLink,
 };
 use audio_component::{Audio, AudioMsg, GlobalAudio};
+use media_session::MediaSessionCallbacks;
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::{closure::Closure, JsCast};
@@ -100,6 +101,12 @@ pub enum PlayerMsg {
     /// Play the given article
     Play(ArticleId),
 
+    /// Ask the queue for the previous track
+    AskForPrevTrack,
+
+    /// Ask the queue for the next track
+    AskForNextTrack,
+
     /// Stops playback if a particular ID is playing. This is so that removing a playing item from
     /// the queue stops the current playback
     StopIfPlaying(ArticleId),
@@ -138,6 +145,8 @@ pub struct Player {
     audio_link: WeakComponentLink<Audio>,
     /// The closure that runs every PLAYER_STATE_SAVE_FREQ seconds saving the player state
     _trigger_save_cb: Closure<dyn 'static + Fn()>,
+    /// Callbacks for the media session API
+    _media_session_cbs: MediaSessionCallbacks,
     /// Holds all the serializable state of this player. This will be loaded from the IndexedDB
     state: PlayerState,
 }
@@ -160,12 +169,77 @@ impl Default for PlayerState {
     }
 }
 
+// When prevtrack is clicked in the MediaSession, go to the beginning of the audio. If it's clicked
+// twice within one second, i.e., double-clicked, then move to the previous track.
+fn mediasession_prevtrack_action(link: &Scope<Player>) {
+    // If the real-world time since the start of the track has been more than 1 sec, then
+    // just seek to beginning. Real-world time accounts for playback speed.
+    let clock_time_since_trackstart =
+        GlobalAudio::get_elapsed() / GlobalAudio::get_playback_speed();
+    if clock_time_since_trackstart > 1.0 {
+        GlobalAudio::seek(0.0);
+    } else {
+        link.send_message(PlayerMsg::AskForPrevTrack);
+    }
+}
+
+// When prevtrack is clicked in the MediaSession, move to the next track
+fn mediasession_nexttrack_action(link: &Scope<Player>) {
+    link.send_message(PlayerMsg::AskForNextTrack);
+}
+
 impl Component for Player {
     type Message = PlayerMsg;
     type Properties = Props;
 
+    fn create(ctx: &Context<Self>) -> Self {
+        // Set the player link to this Player
+        ctx.props()
+            .player_link
+            .borrow_mut()
+            .replace(ctx.link().clone());
+
+        // Set up the closure that gets called every 10sec and triggers a save event
+        let link = ctx.link().clone();
+        let periodic = true;
+        let trigger_save_cb = Closure::new(move || trigger_save(periodic, &link));
+
+        // Set up the MediaSession API
+        let mut _media_session_cbs = MediaSessionCallbacks::default();
+        // Hook up the prev and next track buttons
+        let link = ctx.link().clone();
+        _media_session_cbs.set_prevtrack_action(move || mediasession_prevtrack_action(&link));
+        let link = ctx.link().clone();
+        _media_session_cbs.set_nexttrack_action(move || mediasession_nexttrack_action(&link));
+
+        // Kick off a future to get the last known player state
+        let link = ctx.link().clone();
+        spawn_local(async move {
+            match caching::load_player_state().await {
+                Ok(state) => {
+                    tracing::trace!("successfully restored player from save");
+                    link.send_message(PlayerMsg::SetState(state));
+                }
+                Err(e) => tracing::error!("Could not load player state: {:?}", e),
+            }
+        });
+
+        // Kick off the state saving loop in PLAYER_STATE_SAVE_FREQ seconds
+        utils::run_after_delay(&trigger_save_cb, PLAYER_STATE_SAVE_FREQ);
+
+        // Return the default values for now. Hopefully they get overwritten by the
+        // load_player_state callback
+        Self {
+            _trigger_save_cb: trigger_save_cb,
+            _media_session_cbs,
+            state: PlayerState::default(),
+            audio_link: WeakComponentLink::default(),
+        }
+    }
+
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         let audio_link = self.audio_link.borrow().clone().unwrap();
+        let queue_link = ctx.props().queue_link.borrow().clone().unwrap();
 
         match msg {
             PlayerMsg::Play(id) => {
@@ -200,6 +274,28 @@ impl Component for Player {
 
                 // The state was updated. Refresh the player view
                 true
+            }
+
+            PlayerMsg::AskForPrevTrack => {
+                // Ask the queue to start playing the track that comes before
+                // self.state.now_playing
+                let now_playing = self.state.now_playing.clone();
+                if let Some(ref id) = &now_playing {
+                    queue_link.send_message(QueueMsg::PlayTrackBefore(id.clone()))
+                }
+
+                false
+            }
+
+            PlayerMsg::AskForNextTrack => {
+                // Ask the queue to start playing the track that comes after
+                // self.state.now_playing
+                let now_playing = self.state.now_playing.clone();
+                if let Some(ref id) = &now_playing {
+                    queue_link.send_message(QueueMsg::PlayTrackAfter(id.clone()))
+                }
+
+                false
             }
 
             PlayerMsg::UpdatePlaybackSpeed => {
@@ -291,47 +387,11 @@ impl Component for Player {
         }
     }
 
-    fn create(ctx: &Context<Self>) -> Self {
-        // Set the player link to this Player
-        ctx.props()
-            .player_link
-            .borrow_mut()
-            .replace(ctx.link().clone());
-
-        // Set up the closure that gets called every 10sec and triggers a save event
-        let link = ctx.link().clone();
-        let periodic = true;
-        let trigger_save_cb = Closure::new(move || trigger_save(periodic, &link));
-
-        // Kick off a future to get the last known player state
-        let link = ctx.link().clone();
-        spawn_local(async move {
-            match caching::load_player_state().await {
-                Ok(state) => {
-                    tracing::trace!("successfully restored player from save");
-                    link.send_message(PlayerMsg::SetState(state));
-                }
-                Err(e) => tracing::error!("Could not load player state: {:?}", e),
-            }
-        });
-
-        // Kick off the state saving loop in PLAYER_STATE_SAVE_FREQ seconds
-        utils::run_after_delay(&trigger_save_cb, PLAYER_STATE_SAVE_FREQ);
-
-        // Return the default values for now. Hopefully they get overwritten by the
-        // load_player_state callback
-        Self {
-            _trigger_save_cb: trigger_save_cb,
-            state: PlayerState::default(),
-            audio_link: WeakComponentLink::default(),
-        }
-    }
-
     fn view(&self, ctx: &Context<Self>) -> Html {
         let player_link = ctx.props().player_link.borrow().clone().unwrap();
 
         //
-        // Callbacks for the jump backward and forward buttons
+        // Callbacks for the play, jump backward and forward buttons
         //
 
         let audio_link = self.audio_link.clone();
@@ -352,47 +412,32 @@ impl Component for Player {
                 .send_message(AudioMsg::JumpForward)
         });
 
-        //
-        // Callbacks for the skip prev and next buttons
-        //
-
-        // When prevtrack is clicked, go to the beginning of the audio. If it's clicked twice
-        // within one second, i.e., double-clicked, then move to the previous track.
+        let self_link = player_link.clone();
         let now_playing = self.state.now_playing.clone();
-        let queue_link = ctx.props().queue_link.borrow().clone().unwrap();
-        let prevtrack_cb = Callback::from(move |_: MouseEvent| {
-            // If the real-world time since the start of the track has been more than 1 sec, then
-            // just seek to beginning. Real-world time accounts for playback speed.
-            let clock_time_since_trackstart =
-                GlobalAudio::get_elapsed() / GlobalAudio::get_playback_speed();
-            if clock_time_since_trackstart > 1.0 {
-                GlobalAudio::seek(0.0);
+        let playpause_cb = Callback::from(move |_: MouseEvent| {
+            let playing = GlobalAudio::is_playing();
+            tracing::error!("Is something playing? {playing}");
+            if GlobalAudio::is_playing() {
+                GlobalAudio::pause();
             } else {
-                if let Some(ref id) = &now_playing {
-                    queue_link.send_message(QueueMsg::PlayTrackBefore(id.clone()))
+                tracing::error!("Now playing = {:?}", &now_playing);
+                if let Some(id) = &now_playing {
+                    self_link.send_message(PlayerMsg::Play(id.clone()))
                 }
             }
         });
 
-        // When nexttrack is clicked, move to the next track
-        let now_playing = self.state.now_playing.clone();
-        let queue_link = ctx.props().queue_link.borrow().clone().unwrap();
-        let nexttrack_cb = Callback::from(move |_: MouseEvent| {
-            if let Some(ref id) = &now_playing {
-                queue_link.send_message(QueueMsg::PlayTrackAfter(id.clone()))
-            }
+        // Callback for the "go to beginning". When prevtrack is clicked, go to the beginning of
+        // the audio. If it's clicked twice within one second, i.e., double-clicked, then move to
+        // the previous track.
+        let gotobeginning_cb = Callback::from(move |_: MouseEvent| {
+            GlobalAudio::seek(0.0);
         });
 
-        //
         // Callback for the playback speed
-        //
-
         let playback_speed_cb = player_link.callback(|_| PlayerMsg::UpdatePlaybackSpeed);
 
-        //
         // Set nowplaying
-        //
-
         let now_playing = self.state.now_playing.clone();
         let playback_speed_selector = render_playback_speed_selector(playback_speed_cb);
         let now_playing_str = now_playing
@@ -408,6 +453,22 @@ impl Component for Player {
                 <Audio {audio_link} />
                 <div class="audiocontrol" title="More playback controls">
                     <button
+                        aria-label="Go to beginning"
+                        title="Go to beginning"
+                        onclick={gotobeginning_cb}
+                    >
+                        { "⏮️" }
+                    </button>
+                    <button
+                        aria-label="Play/Pause"
+                        title="Play/Pause"
+                        onclick={playpause_cb}
+                    >
+                        { "⏯" }
+                    </button>
+                    <br />
+
+                    <button
                         aria-label="Jump backwards 10 seconds"
                         title="Jump backwards 10 seconds"
                         onclick={jump_backward_cb}
@@ -420,21 +481,6 @@ impl Component for Player {
                         onclick={jump_forward_cb}
                     >
                     { "↪️" }
-                    </button>
-                    <br />
-                    <button
-                        aria-label="Go to beginning. Double tap for previous article"
-                        title="Go to beginning. Double tap for previous article"
-                        onclick={prevtrack_cb}
-                    >
-                        { "⏮️" }
-                    </button>
-                    <button
-                        aria-label="Next article"
-                        title="Next article"
-                        onclick={nexttrack_cb}
-                    >
-                    { "⏭️" }
                     </button>
 
                     <div class="playbackSpeedSection">

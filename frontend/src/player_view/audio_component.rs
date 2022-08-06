@@ -1,4 +1,4 @@
-use super::media_session::{MediaSessionCallbacks, MediaSessionState};
+use super::media_session::MediaSessionState;
 use crate::WeakComponentLink;
 
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
@@ -114,6 +114,13 @@ impl GlobalAudio {
         if let Err(e) = res {
             tracing::error!("Error playing track: {:?}", e);
         }
+    }
+
+    /// Returns whether something is currently playing
+    pub fn is_playing() -> bool {
+        let audio_elem = GlobalAudio::get_elem();
+        // If there is something loaded and the state is not paused, then we're playing something
+        audio_elem.duration() > 0.0 && !audio_elem.paused()
     }
 
     /// Runs pause() on the <audio> element in this page
@@ -243,7 +250,6 @@ struct AudioElemCallbacks {
 /// A component that's just an HTML <audio> element with some extra functionality
 #[derive(Default)]
 pub struct Audio {
-    _media_session_cbs: MediaSessionCallbacks,
     audio_elem_cbs: AudioElemCallbacks,
 }
 
@@ -327,7 +333,7 @@ impl Component for Audio {
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
         html! {
-            <audio controls=true style={ "display: block;" } id={AUDIO_ELEM_ID}>
+            <audio controls=false style={ "display: block;" } id={AUDIO_ELEM_ID}>
                 { "Your browser does not support the <code>audio</code> element" }
             </audio>
         }

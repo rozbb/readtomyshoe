@@ -95,6 +95,7 @@ An incomplete to-do list, roughly in order of most important to least important:
 - [ ] Add an archive feature for articles whose audio has been pruned
 - [ ] Fix mediasession breaking on play/pause
 - [ ] Write prevtrack and nexttrack mediasession actions
+- [ ] Make it so that deleting an article from the queue deletes all its copies from the queue
 - [ ] Make autoplay an option
 - [ ] Fix bug where adding ">>> 2022-07-21 preventing loss dot jpeg" errors with a 400
 - [ ] Make filenames safe. Filenames should be alphanumeric and end with the hash of contents. Put title and URL in ID3 metadata. And when serving the file list, cache the metadata so we don't open all the files every call. Subpoint: use a filesystem watcher to update the metadata, and use Last-Modified-Since to save bandwidth

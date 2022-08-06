@@ -1,6 +1,9 @@
 use super::audio_component::GlobalAudio;
 
-use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use wasm_bindgen::{
+    closure::{Closure, IntoWasmClosure},
+    JsCast, JsValue,
+};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{
     MediaImage, MediaMetadata, MediaSession, MediaSessionAction, MediaSessionActionDetails,
@@ -87,6 +90,36 @@ impl Default for MediaSessionCallbacks {
             _next_track_action,
             _prev_track_action,
         }
+    }
+}
+
+impl MediaSessionCallbacks {
+    /// Sets the action performed when the user clicks the "previous track" button
+    pub fn set_prevtrack_action<F>(&mut self, action: F)
+    where
+        F: IntoWasmClosure<dyn Fn()> + 'static,
+    {
+        self._prev_track_action = Closure::new(action);
+
+        // Update the handler
+        get_media_session().set_action_handler(
+            MediaSessionAction::Previoustrack,
+            Some(self._prev_track_action.as_ref().unchecked_ref()),
+        );
+    }
+
+    /// Sets the action performed when the user clicks the "next track" button
+    pub fn set_nexttrack_action<F>(&mut self, action: F)
+    where
+        F: IntoWasmClosure<dyn Fn()> + 'static,
+    {
+        self._next_track_action = Closure::new(action);
+
+        // Update the handler
+        get_media_session().set_action_handler(
+            MediaSessionAction::Nexttrack,
+            Some(self._next_track_action.as_ref().unchecked_ref()),
+        );
     }
 }
 

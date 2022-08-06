@@ -169,25 +169,6 @@ impl Default for PlayerState {
     }
 }
 
-// When prevtrack is clicked in the MediaSession, go to the beginning of the audio. If it's clicked
-// twice within one second, i.e., double-clicked, then move to the previous track.
-fn mediasession_prevtrack_action(link: &Scope<Player>) {
-    // If the real-world time since the start of the track has been more than 1 sec, then
-    // just seek to beginning. Real-world time accounts for playback speed.
-    let clock_time_since_trackstart =
-        GlobalAudio::get_elapsed() / GlobalAudio::get_playback_speed();
-    if clock_time_since_trackstart > 1.0 {
-        GlobalAudio::seek(0.0);
-    } else {
-        link.send_message(PlayerMsg::AskForPrevTrack);
-    }
-}
-
-// When prevtrack is clicked in the MediaSession, move to the next track
-fn mediasession_nexttrack_action(link: &Scope<Player>) {
-    link.send_message(PlayerMsg::AskForNextTrack);
-}
-
 impl Component for Player {
     type Message = PlayerMsg;
     type Properties = Props;
@@ -208,9 +189,11 @@ impl Component for Player {
         let mut _media_session_cbs = MediaSessionCallbacks::default();
         // Hook up the prev and next track buttons
         let link = ctx.link().clone();
-        _media_session_cbs.set_prevtrack_action(move || mediasession_prevtrack_action(&link));
+        _media_session_cbs
+            .set_prevtrack_action(move || link.send_message(PlayerMsg::AskForPrevTrack));
         let link = ctx.link().clone();
-        _media_session_cbs.set_nexttrack_action(move || mediasession_nexttrack_action(&link));
+        _media_session_cbs
+            .set_nexttrack_action(move || link.send_message(PlayerMsg::AskForNextTrack));
 
         // Kick off a future to get the last known player state
         let link = ctx.link().clone();

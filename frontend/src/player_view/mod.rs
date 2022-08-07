@@ -30,7 +30,7 @@ async fn prepare_for_play(id: &ArticleId, audio_link: &Scope<Audio>) -> f64 {
     let elapsed = match caching::load_article_state(&id).await {
         Ok(state) => state.elapsed,
         Err(e) => {
-            tracing::warn!("Couldn't load article state {}: {:?}", id.0, e);
+            tracing::debug!("Article state did not load {}: {:?}", id.0, e);
             0.0
         }
     };
@@ -332,6 +332,22 @@ impl Component for Player {
             }
 
             PlayerMsg::SaveState { elapsed, periodic } => {
+                // If this was a periodic save, set up the next trigger
+                if periodic {
+                    utils::run_after_delay(&self._trigger_save_cb, PLAYER_STATE_SAVE_FREQ);
+                }
+
+                // Sometimes the browser will unload our tab if the audio is paused. When the user
+                // comes back to the tab, the page is refreshed and the audio playback is set to
+                // 0sec. This is fine, as the user can just hit the Play/Pause button or the queue
+                // play button (not the <audio> play button, since that'd play from the beginning).
+                // However, if the user does not hit the button within 10sec, the elapsed time of
+                // 0sec will be saved, and the user will lose their place. To prevent this, do not
+                // do a periodic save if the current elapsed time is 0sec.
+                if periodic && elapsed == 0.0 {
+                    return false;
+                }
+
                 // Collect the states to save. Player state holds now-playing and playback speed.
                 // Article state holds elapsed time
                 let player_state = self.state.clone();
@@ -359,11 +375,6 @@ impl Component for Player {
                         tracing::trace!("No article to save");
                     }
                 });
-
-                // If this was a periodic save, set up the next trigger
-                if periodic {
-                    utils::run_after_delay(&self._trigger_save_cb, PLAYER_STATE_SAVE_FREQ);
-                }
 
                 false
             }
@@ -399,7 +410,6 @@ impl Component for Player {
         let now_playing = self.state.now_playing.clone();
         let playpause_cb = Callback::from(move |_: MouseEvent| {
             let playing = GlobalAudio::is_playing();
-            tracing::error!("Is something playing? {playing}");
             if GlobalAudio::is_playing() {
                 GlobalAudio::pause();
             } else {

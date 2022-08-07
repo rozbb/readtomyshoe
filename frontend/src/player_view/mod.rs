@@ -403,13 +403,12 @@ impl Component for Player {
                 .borrow()
                 .as_ref()
                 .unwrap()
-                .send_message(AudioMsg::JumpForward)
+                .send_message(AudioMsg::JumpBackward)
         });
 
         let self_link = player_link.clone();
         let now_playing = self.state.now_playing.clone();
         let playpause_cb = Callback::from(move |_: MouseEvent| {
-            let playing = GlobalAudio::is_playing();
             if GlobalAudio::is_playing() {
                 GlobalAudio::pause();
             } else {

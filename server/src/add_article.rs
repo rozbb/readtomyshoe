@@ -1,7 +1,14 @@
-use crate::tts::{get_api_key, tts, TtsRequest};
+use crate::{
+    tts::{get_api_key, tts, TtsRequest},
+    util::derive_article_id,
+};
 use common::{ArticleTextSubmission, ArticleUrlSubmission};
 
-use std::{fs::OpenOptions, io::Write, path::Path};
+use std::{
+    fs::{self, File, OpenOptions},
+    io::Write,
+    path::Path,
+};
 
 use anyhow::anyhow;
 use async_process::Command;
@@ -38,45 +45,33 @@ pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
 
 /// Converts the given article contents to speech, and returns the new filename
 async fn add_article_by_text(
-    Json(ArticleTextSubmission { title, body }): Json<ArticleTextSubmission>,
+    Json(article): Json<ArticleTextSubmission>,
     Extension(audio_blob_dir): Extension<String>,
 ) -> Result<impl IntoResponse, AddArticleError> {
-    tracing::debug!("Adding article '{title}'");
+    tracing::debug!("Adding article '{}'", article.title);
+
+    let id = derive_article_id(&article);
 
     // Open a new MP3 file. Fail if the file already exists
-    let savepath = Path::new(&audio_blob_dir)
-        .join(&title)
-        .with_extension("mp3");
+    let savepath = Path::new(&audio_blob_dir).join(&id).with_extension("mp3");
     let mut savefile = OpenOptions::new()
         .write(true)
         .create(false)
         .create_new(true)
-        .open(savepath)
+        .open(&savepath)
         .map_err(|e| anyhow!("Couldn't open savefile: {:?}", e))?;
 
-    // TODO: Delete the savefile if an error occurs
-
-    let api_key = get_api_key().map_err(|e| anyhow!("Failed to get Google API key: {:?}", e))?;
-
-    // TODO: Internationalize this to use the correct stop character for the given language
-    // Include the title at the top of the article.
-    let text = format!("{title}. {body}");
-    let req = TtsRequest {
-        text,
-        use_wavenet: true,
-    };
-
-    // Make the TTS request
-    let bytes = tts(&api_key, req)
-        .await
-        .map_err(|e| anyhow!("TTS failed: {:?}", e))?;
-
-    // Save the file
-    savefile
-        .write_all(&bytes)
-        .map_err(|e| anyhow!("Save failed: {:?}", e))?;
-
-    Ok(title)
+    // Try to do a TTS and save to the savefile. On error, make sure to clean up the empty file
+    match tts_to_file(&mut savefile, &article).await {
+        Ok(_) => Ok(article.title),
+        Err(e) => {
+            // Remove the file
+            let _ = fs::remove_file(savepath)
+                .map_err(|e| tracing::error!("could not delete {id}: {e}"));
+            // Return the error
+            Err(e)
+        }
+    }
 }
 
 /// A portion of trafilatura's extracted text. The rest of the fields are: title, author, hostname,
@@ -122,4 +117,31 @@ async fn add_article_by_url(
 
     // Now that we have the article body, call down to add_article_by_text
     add_article_by_text(Json(text_submission), audio_blob_dir).await
+}
+
+/// Converts an article to speech and saves to the given file
+async fn tts_to_file(
+    file: &mut File,
+    ArticleTextSubmission { title, body }: &ArticleTextSubmission,
+) -> Result<(), AddArticleError> {
+    let api_key = get_api_key().map_err(|e| anyhow!("Failed to get Google API key: {:?}", e))?;
+
+    // TODO: Internationalize this to use the correct stop character for the given language
+    // Include the title at the top of the article.
+    let text = format!("{title}. {body}");
+    let req = TtsRequest {
+        text,
+        use_wavenet: true,
+    };
+
+    // Make the TTS request
+    let bytes = tts(&api_key, req)
+        .await
+        .map_err(|e| anyhow!("TTS failed: {:?}", e))?;
+
+    // Save the file
+    file.write_all(&bytes)
+        .map_err(|e| anyhow!("Save failed: {:?}", e))?;
+
+    Ok(())
 }

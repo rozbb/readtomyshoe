@@ -1,12 +1,16 @@
 use serde::{Deserialize, Serialize};
 
 /// Contains all the metadata about an article
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ArticleMetadata {
+    /// The ID of the article
+    pub id: String,
     /// The title of the article
     pub title: String,
-    /// The datetime the article was last modified, in seconds since Unix epoch
-    pub unix_time_modified: Option<u64>,
+    /// The datetime the article was added to the library
+    pub datetime_added: Option<u64>,
+    /// The URL this article was sourced from, if any
+    pub source_url: Option<String>,
 }
 
 /// A library catalog is a list of article metadata

@@ -1,3 +1,5 @@
+use crate::util::get_metadata;
+
 use std::{
     ffi::OsStr,
     fs,
@@ -45,6 +47,26 @@ async fn list_articles(
             if entry.path().extension() != Some(OsStr::new("mp3")) {
                 return None;
             }
+
+            // As a backup for the added time, get the time the file was last modified
+            let time_modified: Option<SystemTime> =
+                entry.metadata().and_then(|m| m.modified()).ok();
+            // Convert the time to seconds since epoch
+            let unix_time_modified = time_modified
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|dur| dur.as_secs());
+
+            // Get the metadata
+            match get_metadata(entry.path(), unix_time_modified) {
+                Ok(meta) => Some(meta),
+                Err(e) => {
+                    tracing::error!("Could not extract metadata: {e}");
+                    None
+                }
+            }
+
+            /*
+
             // Get the "file stem", i.e., the filename without hte extension
             let title = entry
                 .path()
@@ -63,9 +85,12 @@ async fn list_articles(
 
             // Return the metadata
             Some(ArticleMetadata {
+                id: title.clone(),
                 title,
-                unix_time_modified,
+                datetime_added: unix_time_modified,
+                source_url: None,
             })
+                */
         })
         .collect::<Vec<ArticleMetadata>>();
     let mut library_catalog = LibraryCatalog(metadatas);
@@ -73,7 +98,7 @@ async fn list_articles(
     // Now sort by time modified, most recently modified first
     library_catalog
         .0
-        .sort_by_key(|meta| std::cmp::Reverse(meta.unix_time_modified));
+        .sort_by_key(|meta| std::cmp::Reverse(meta.datetime_added));
 
     // Done
     Ok(Json(library_catalog))

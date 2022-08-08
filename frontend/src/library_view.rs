@@ -37,15 +37,15 @@ async fn fetch_article_list() -> Result<LibraryCatalog, AnyError> {
 }
 
 /// Fetches a specific article
-pub async fn fetch_article(title: &str) -> Result<CachedArticle, AnyError> {
+pub async fn fetch_article(id: &str) -> Result<CachedArticle, AnyError> {
     // Fetch the audio blobs
-    let filename = format!("{title}.mp3");
+    let filename = format!("{id}.mp3");
     let encoded_title = urlencoding::encode(&filename);
     let resp = Request::get(&format!("/api/audio-blobs/{encoded_title}"))
         .send()
         .await
         .map_err(|e| {
-            let ctx = format!("Error fetching article {title}");
+            let ctx = format!("Error fetching article {id}");
             AnyError::from(e).context(ctx)
         })?;
     if !resp.ok() {
@@ -66,8 +66,8 @@ pub async fn fetch_article(title: &str) -> Result<CachedArticle, AnyError> {
 
     // Return the article
     Ok(CachedArticle {
-        title: title.to_string(),
-        id: ArticleId(title.to_string()),
+        title: id.to_string(),
+        id: ArticleId(id.to_string()),
         audio_blob,
     })
 }
@@ -83,15 +83,15 @@ fn pageshow_callback(event: PageTransitionEvent, library_link: Scope<Library>) {
 /// Renders an item in the library
 fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> Html {
     let title = metadata.title.clone();
-    let title_copy = title.clone();
-    let callback = library_link.callback(move |_| LibraryMsg::FetchArticle(title_copy.clone()));
+    let id = metadata.id.clone();
+    let callback = library_link.callback(move |_| LibraryMsg::FetchArticle(id.clone()));
 
     // Format the date the article was added
     let lang = gloo_utils::window()
         .navigator()
         .language()
         .unwrap_or("en-US".to_string());
-    let date_added: Option<String> = metadata.unix_time_modified.map(|t| {
+    let date_added: Option<String> = metadata.datetime_added.map(|t| {
         // Convert to a local date string  by making a Date object and giving it the unix time
         let js_date = js_sys::Date::new_0();
         // set_time takes number of milliseconds since epoch, so multiply by 1000
@@ -164,12 +164,12 @@ impl Component for Library {
                     }
                 });
             }
-            LibraryMsg::FetchArticle(title) => {
+            LibraryMsg::FetchArticle(id) => {
                 // Fetch an article, save it, and relay the article handle. If there's an error,
                 // post it
                 ctx.link()
                     .callback_future_once(|()| async move {
-                        let article = match fetch_article(&title).await {
+                        let article = match fetch_article(&id).await {
                             Ok(a) => a,
                             Err(e) => return LibraryMsg::SetError(e),
                         };

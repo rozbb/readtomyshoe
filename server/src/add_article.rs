@@ -1,19 +1,29 @@
 use crate::{
     tts::{get_api_key, tts, TtsRequest},
-    util::derive_article_id,
+    util::{derive_article_id, save_metadata},
 };
-use common::{ArticleTextSubmission, ArticleUrlSubmission};
+use common::{ArticleMetadata, ArticleTextSubmission, ArticleUrlSubmission};
 
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
     path::Path,
+    time::SystemTime,
 };
 
 use anyhow::anyhow;
 use async_process::Command;
-use axum::{extract::Extension, response::IntoResponse, routing::post, Json, Router};
+use axum::{extract::Extension, routing::post, Json, Router};
 use serde::Deserialize;
+
+/// A portion of trafilatura's extracted text. The rest of the fields are: title, author, hostname,
+/// date, categories, tags, fingerprint, id, license, comments, raw_text, source, source_hostname,
+/// excerpt, text
+#[derive(Deserialize)]
+struct ExtractedArticle {
+    title: String,
+    text: String,
+}
 
 struct AddArticleError(anyhow::Error);
 
@@ -37,19 +47,47 @@ pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
     router.nest(
         "/api",
         Router::new()
-            .route("/add-article-by-text", post(add_article_by_text))
-            .route("/add-article-by-url", post(add_article_by_url))
+            .route("/add-article-by-text", post(add_article_by_text_endpoint))
+            .route("/add-article-by-url", post(add_article_by_url_endpoint))
             .layer(Extension(audio_blob_dir.to_string())),
     )
 }
 
 /// Converts the given article contents to speech, and returns the new filename
-async fn add_article_by_text(
+async fn add_article_by_text_endpoint(
     Json(article): Json<ArticleTextSubmission>,
     Extension(audio_blob_dir): Extension<String>,
-) -> Result<impl IntoResponse, AddArticleError> {
+) -> Result<String, AddArticleError> {
+    // Just call down to add_article_by_text
     tracing::debug!("Adding article '{}'", article.title);
+    let meta = add_article_by_text(&article, &audio_blob_dir).await?;
 
+    // Save the metadata in the ID3 tags
+    let _ = save_metadata(&meta, &audio_blob_dir)
+        .map_err(|e| tracing::error!("Error saving metadata: {e}"));
+
+    Ok(meta.id)
+}
+
+/// Fetches the article at the given URL, converts it to speech, and returns the new filename
+async fn add_article_by_url_endpoint(
+    Json(ArticleUrlSubmission { url }): Json<ArticleUrlSubmission>,
+    Extension(audio_blob_dir): Extension<String>,
+) -> Result<String, AddArticleError> {
+    let meta = add_article_by_url(&url, &audio_blob_dir).await?;
+
+    // Save the metadata in the ID3 tags
+    let _ = save_metadata(&meta, &audio_blob_dir)
+        .map_err(|e| tracing::error!("Error saving metadata: {e}"));
+
+    Ok(meta.id)
+}
+
+/// The real logic. Converts the given article contents to speech, and returns the new filename
+async fn add_article_by_text(
+    article: &ArticleTextSubmission,
+    audio_blob_dir: &str,
+) -> Result<ArticleMetadata, AddArticleError> {
     let id = derive_article_id(&article);
 
     // Open a new MP3 file. Fail if the file already exists
@@ -63,31 +101,37 @@ async fn add_article_by_text(
 
     // Try to do a TTS and save to the savefile. On error, make sure to clean up the empty file
     match tts_to_file(&mut savefile, &article).await {
-        Ok(_) => Ok(article.title),
+        Ok(_) => (),
         Err(e) => {
             // Remove the file
             let _ = fs::remove_file(savepath)
                 .map_err(|e| tracing::error!("could not delete {id}: {e}"));
-            // Return the error
-            Err(e)
+            // Return with the error
+            return Err(e);
         }
     }
+
+    // Get the current time. This is the official time the article was added to the library
+    let unix_epoch_now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // Return the metadata
+    Ok(ArticleMetadata {
+        id,
+        title: article.title.clone(),
+        datetime_added: Some(unix_epoch_now),
+        source_url: None,
+    })
 }
 
-/// A portion of trafilatura's extracted text. The rest of the fields are: title, author, hostname,
-/// date, categories, tags, fingerprint, id, license, comments, raw_text, source, source_hostname,
-/// excerpt, text
-#[derive(Deserialize)]
-struct ExtractedArticle {
-    title: String,
-    text: String,
-}
-
-/// Fetches the article at the given URL, converts it to speech, and returns the new filename
+/// The real logic. Fetches the article at the given URL, converts it to speech, and returns the
+/// new filename
 async fn add_article_by_url(
-    Json(ArticleUrlSubmission { url }): Json<ArticleUrlSubmission>,
-    audio_blob_dir: Extension<String>,
-) -> Result<impl IntoResponse, AddArticleError> {
+    url: &str,
+    audio_blob_dir: &str,
+) -> Result<ArticleMetadata, AddArticleError> {
     // TODO: Check earlier that trafilatura is present
 
     // Run trafilatura on the given URL
@@ -95,7 +139,7 @@ async fn add_article_by_url(
         .env("PYTHONPATH", "../python_deps")
         .arg("--json")
         .arg("--URL")
-        .arg(url)
+        .arg(&url)
         .output()
         .await
         .map_err(|e| anyhow!("IO error running trafulatura: {:?}", e))?;
@@ -116,7 +160,11 @@ async fn add_article_by_url(
     };
 
     // Now that we have the article body, call down to add_article_by_text
-    add_article_by_text(Json(text_submission), audio_blob_dir).await
+    let mut meta = add_article_by_text(&text_submission, audio_blob_dir).await?;
+    // Add the URL to the metadata
+    meta.source_url = Some(url.to_string());
+
+    Ok(meta)
 }
 
 /// Converts an article to speech and saves to the given file

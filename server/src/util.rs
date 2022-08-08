@@ -1,6 +1,11 @@
-use common::ArticleTextSubmission;
+use common::{ArticleMetadata, ArticleTextSubmission};
 
+use std::path::Path;
+
+use anyhow::{bail, Error as AnyError};
 use blake2::{Blake2s256, Digest};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
+use id3::{Tag, TagLike, Version};
 
 /// Filenames in `audio_blobs` are of the form `TITLE-HASH.mp3`. This is maximum number of bytes
 /// allowed in `TITLE`. This MUST be less than 256.
@@ -51,4 +56,97 @@ pub fn derive_article_id(article: &ArticleTextSubmission) -> String {
     let truncated_title = truncate_to_bytes(&article.title, FILENAME_TITLE_MAXLEN);
     let hash = hash_article(&article);
     format!("{truncated_title}-{hash}.mp3")
+}
+
+/// Saves article metadata as ID3 tags in the MP3 file
+///     url -> Artist
+///     title -> Title
+///     date fetched  -> Recording Time
+pub fn save_metadata(meta: &ArticleMetadata, audio_blob_dir: &str) -> Result<(), AnyError> {
+    let savepath = Path::new(&audio_blob_dir)
+        .join(&meta.id)
+        .with_extension("mp3");
+
+    // Set the ID3 title
+    let mut tag = Tag::new();
+    tag.set_title(&meta.title);
+
+    // Set the ID3 recording date to be the date the article was added
+    if let Some(added) = meta.datetime_added {
+        let date = NaiveDateTime::from_timestamp(
+            added
+                .try_into()
+                .expect("it is 2038 and chrono still uses i64 for unix time"),
+            0,
+        );
+        let date = DateTime::<Utc>::from_utc(date, Utc);
+        tag.set_date_recorded(id3::Timestamp {
+            year: date.year(),
+            month: Some(date.month() as u8),
+            day: Some(date.day() as u8),
+            hour: Some(date.hour() as u8),
+            minute: Some(date.minute() as u8),
+            second: Some(date.second() as u8),
+        });
+    }
+
+    // Set the URL as the artist
+    if let Some(url) = &meta.source_url {
+        tag.set_artist(url);
+    }
+
+    // Now write
+    tag.write_to_path(savepath, Version::Id3v24)
+        .map_err(Into::into)
+}
+
+/// Gets article metadata from ID3 tags in the MP3 file
+///     url <- Artist
+///     title <- Title
+///     date fetched  <- Recording Time
+/// The `last_modified_timestamp` is a backup in case the Recording Time isn't set
+pub fn get_metadata(
+    path: impl AsRef<Path>,
+    last_modified_timestamp: Option<u64>,
+) -> Result<ArticleMetadata, AnyError> {
+    // The article ID is its filename. It better be unicode
+    let id = match path.as_ref().file_stem().unwrap().to_str() {
+        Some(s) => s.to_string(),
+        None => bail!("filename is not valid unicode"),
+    };
+
+    // Pick default metadata in case no ID3 tag exists
+    let mut meta = ArticleMetadata {
+        title: id.clone(),
+        id,
+        source_url: None,
+        datetime_added: last_modified_timestamp,
+    };
+
+    // Try to get the metadata from the ID3 tags
+    if let Ok(tag) = Tag::read_from_path(path) {
+        // Try to get the ID3 title and source URL (URL is in the Artist field)
+        meta.title = tag.title().unwrap_or(&meta.title).to_string();
+        meta.source_url = tag.artist().map(str::to_string);
+
+        // Extract the time recorded and convert it back to a unix timestamp. It's a pain
+        let datetime_added = tag.date_recorded().and_then(|recorded| {
+            let date = NaiveDate::from_ymd(
+                recorded.year,
+                recorded.month.unwrap_or(0) as u32,
+                recorded.day.unwrap_or(0) as u32,
+            );
+            let time = NaiveTime::from_hms(
+                recorded.hour.unwrap_or(0) as u32,
+                recorded.minute.unwrap_or(0) as u32,
+                recorded.second.unwrap_or(0) as u32,
+            );
+            let naive_datetime = NaiveDateTime::new(date, time);
+            let datetime = DateTime::<Utc>::from_utc(naive_datetime, Utc);
+            datetime.timestamp().try_into().ok()
+        });
+        meta.datetime_added = datetime_added.or(meta.datetime_added);
+    }
+
+    Ok(meta)
 }

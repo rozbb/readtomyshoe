@@ -1,14 +1,20 @@
 use crate::util::get_metadata;
 
 use std::{
+    collections::BTreeMap,
     ffi::OsStr,
     fs,
-    time::{SystemTime, UNIX_EPOCH},
+    path::PathBuf,
+    sync::{Arc, Mutex},
 };
 
 use common::{ArticleMetadata, LibraryCatalog};
 
 use axum::{extract::Extension, http::StatusCode, routing::get, Json, Router};
+
+/// The in-memory metadata cache of all the articles in the library. There is currently no way to
+/// invalidate the cache, so if a file changes, the server needs to be restarted.
+type LibraryCache = Arc<Mutex<BTreeMap<PathBuf, ArticleMetadata>>>;
 
 // Sets the /api/list-articles route
 pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
@@ -16,13 +22,15 @@ pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
         "/api",
         Router::new()
             .route("/list-articles", get(list_articles))
-            .layer(Extension(audio_blob_dir.to_string())),
+            .layer(Extension(audio_blob_dir.to_string()))
+            .layer(Extension(LibraryCache::default())),
     )
 }
 
 /// Lists the articles in the audio blob directory
 async fn list_articles(
     Extension(audio_blob_dir): Extension<String>,
+    Extension(metadata_cache): Extension<LibraryCache>,
 ) -> Result<Json<LibraryCatalog>, StatusCode> {
     // Try to open the directory
     let dir: fs::ReadDir = match fs::read_dir(audio_blob_dir) {
@@ -42,34 +50,44 @@ async fn list_articles(
                 return None;
             }
             let entry = entry.unwrap();
+            let path = entry.path();
 
             // Don't list non-MP3 values
-            if entry.path().extension() != Some(OsStr::new("mp3")) {
+            if path.extension() != Some(OsStr::new("mp3")) {
                 return None;
             }
 
-            // As a backup for the added time, get the time the file was last modified
-            let time_modified: Option<SystemTime> =
-                entry.metadata().and_then(|m| m.modified()).ok();
-            // Convert the time to seconds since epoch
-            let unix_time_modified = time_modified
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|dur| dur.as_secs());
+            // Try to open the cache
+            if let Ok(mut cache) = metadata_cache.lock() {
+                let mut already_cached = true;
 
-            // Get the metadata. The unix time modified is only used as a backup "date added" time
-            // if the real date added isn't found.
-            match get_metadata(entry.path(), unix_time_modified) {
-                Ok(meta) => Some(meta),
-                Err(e) => {
-                    tracing::error!("Could not extract metadata: {e}");
-                    None
+                // See if the metadata is in the cache. If so, return it
+                let meta = cache.get(&path).cloned().or_else(|| {
+                    // If this file isn't in the cache, get the metadata
+                    already_cached = false;
+                    get_metadata(&entry)
+                        .map_err(|e| tracing::error!("Could not extract metadata: {e}"))
+                        .ok()
+                });
+
+                // If the file wasn't in the cache and metadata extraction succeeded, put the
+                // metadata in the cache
+                if !already_cached {
+                    meta.as_ref().map(|m| cache.insert(path, m.clone()));
                 }
+
+                meta
+            } else {
+                // If the cache is poisoned, just get the metadata from the file
+                get_metadata(&entry)
+                    .map_err(|e| tracing::error!("Could not extract metadata: {e}"))
+                    .ok()
             }
         })
         .collect::<Vec<ArticleMetadata>>();
-    let mut library_catalog = LibraryCatalog(metadatas);
 
-    // Now sort by time modified, most recently modified first
+    // Package the metadata and sort by time modified, most recently modified first
+    let mut library_catalog = LibraryCatalog(metadatas);
     library_catalog
         .0
         .sort_by_key(|meta| std::cmp::Reverse(meta.datetime_added));

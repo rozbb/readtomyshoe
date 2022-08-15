@@ -1,6 +1,10 @@
 use common::{ArticleMetadata, ArticleTextSubmission};
 
-use std::path::Path;
+use std::{
+    fs::DirEntry,
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::{bail, Error as AnyError};
 use blake2::{Blake2s256, Digest};
@@ -106,14 +110,21 @@ pub fn save_metadata(meta: &ArticleMetadata, audio_blob_dir: &str) -> Result<(),
 /// Gets article metadata from ID3 tags in the MP3 file
 ///     url <- Artist
 ///     title <- Title
-///     date fetched  <- Recording Time
-/// The `last_modified_timestamp` is a backup in case the Recording Time isn't set
-pub fn get_metadata(
-    path: impl AsRef<Path>,
-    last_modified_timestamp: Option<u64>,
-) -> Result<ArticleMetadata, AnyError> {
+///     date fetched  <- Recording Time (or else Unix last modified time)
+pub fn get_metadata(entry: &DirEntry) -> Result<ArticleMetadata, AnyError> {
+    let path = entry.path();
+
+    // The `last_modified_timestamp` is a backup in case the Recording Time isn't set
+    let last_modified_timestamp: Option<u64> = {
+        let time_modified: Option<SystemTime> = entry.metadata().and_then(|m| m.modified()).ok();
+        // Convert the time to seconds since epoch
+        time_modified
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|dur| dur.as_secs())
+    };
+
     // The article ID is its filename. It better be unicode
-    let id = match path.as_ref().file_stem().unwrap().to_str() {
+    let id = match path.file_stem().unwrap().to_str() {
         Some(s) => s.to_string(),
         None => bail!("filename is not valid unicode"),
     };

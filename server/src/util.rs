@@ -40,6 +40,8 @@ fn truncate_to_bytes(s: &str, n: usize) -> &str {
 /// Panics: if `title.len() > 255`.
 fn hash_article(ArticleTextSubmission { title, body }: &ArticleTextSubmission) -> String {
     let mut h = Blake2s256::default();
+    // This should never be an issue because derive_article_id truncates the title to
+    // FILENAME_TITLE_MAXLEN bytes, which is far less than 256
     let title_len: u8 = title.len().try_into().unwrap();
 
     // Compute H(title_len || title || body)
@@ -52,6 +54,7 @@ fn hash_article(ArticleTextSubmission { title, body }: &ArticleTextSubmission) -
     zbase32::encode(&digest, ARTICLE_HASH_BITLEN)
 }
 
+/// Derives the unique ID of this article. It's of the form SHORTTITLE-HASH.mp3
 pub fn derive_article_id(article: &ArticleTextSubmission) -> String {
     let truncated_title = truncate_to_bytes(&article.title, FILENAME_TITLE_MAXLEN);
     let hash = hash_article(&article);

@@ -56,7 +56,8 @@ async fn list_articles(
                 .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
                 .map(|dur| dur.as_secs());
 
-            // Get the metadata
+            // Get the metadata. The unix time modified is only used as a backup "date added" time
+            // if the real date added isn't found.
             match get_metadata(entry.path(), unix_time_modified) {
                 Ok(meta) => Some(meta),
                 Err(e) => {
@@ -64,33 +65,6 @@ async fn list_articles(
                     None
                 }
             }
-
-            /*
-
-            // Get the "file stem", i.e., the filename without hte extension
-            let title = entry
-                .path()
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .map(str::to_string)
-                .unwrap_or("[could not get filename]".to_string());
-
-            // Now get the time the file was last modified
-            let time_modified: Option<SystemTime> =
-                entry.metadata().and_then(|m| m.modified()).ok();
-            // Convert the time to seconds since epoch
-            let unix_time_modified = time_modified
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|dur| dur.as_secs());
-
-            // Return the metadata
-            Some(ArticleMetadata {
-                id: title.clone(),
-                title,
-                datetime_added: unix_time_modified,
-                source_url: None,
-            })
-                */
         })
         .collect::<Vec<ArticleMetadata>>();
     let mut library_catalog = LibraryCatalog(metadatas);

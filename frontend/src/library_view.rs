@@ -37,7 +37,7 @@ async fn fetch_article_list() -> Result<LibraryCatalog, AnyError> {
 }
 
 /// Fetches a specific article
-pub async fn fetch_article(id: &str) -> Result<CachedArticle, AnyError> {
+pub async fn fetch_article(id: &str, title: &str) -> Result<CachedArticle, AnyError> {
     // Fetch the audio blobs
     let filename = format!("{id}.mp3");
     let encoded_title = urlencoding::encode(&filename);
@@ -66,7 +66,7 @@ pub async fn fetch_article(id: &str) -> Result<CachedArticle, AnyError> {
 
     // Return the article
     Ok(CachedArticle {
-        title: id.to_string(),
+        title: title.to_string(),
         id: ArticleId(id.to_string()),
         audio_blob,
     })
@@ -84,7 +84,11 @@ fn pageshow_callback(event: PageTransitionEvent, library_link: Scope<Library>) {
 fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> Html {
     let title = metadata.title.clone();
     let id = metadata.id.clone();
-    let callback = library_link.callback(move |_| LibraryMsg::FetchArticle(id.clone()));
+    let title_copy = title.clone();
+    let callback = library_link.callback(move |_| LibraryMsg::FetchArticle {
+        id: id.clone(),
+        title: title_copy.clone(),
+    });
 
     // Format the date the article was added
     let lang = gloo_utils::window()
@@ -132,7 +136,7 @@ pub(crate) struct Library {
 pub(crate) enum LibraryMsg {
     SetCatalog(LibraryCatalog),
     SetError(AnyError),
-    FetchArticle(String),
+    FetchArticle { id: String, title: String },
     FetchLibrary,
     PassArticleToQueue(QueueEntry),
 }
@@ -164,12 +168,12 @@ impl Component for Library {
                     }
                 });
             }
-            LibraryMsg::FetchArticle(id) => {
+            LibraryMsg::FetchArticle { id, title } => {
                 // Fetch an article, save it, and relay the article handle. If there's an error,
                 // post it
                 ctx.link()
                     .callback_future_once(|()| async move {
-                        let article = match fetch_article(&id).await {
+                        let article = match fetch_article(&id, &title).await {
                             Ok(a) => a,
                             Err(e) => return LibraryMsg::SetError(e),
                         };

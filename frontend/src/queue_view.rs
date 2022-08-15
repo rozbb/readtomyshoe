@@ -17,7 +17,7 @@ pub struct Props {
 }
 
 /// An entry in the queue has the title and ID of the article
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QueueEntry {
     pub(crate) id: ArticleId,
     pub(crate) title: String,
@@ -132,28 +132,25 @@ impl Component for Queue {
             QueueMsg::PlayTrackBefore(article_id) => {
                 // Find the article ID in the queue
                 let now_playing_idx = self.entries.iter().position(|x| x.id == article_id);
-                // Get the ID of the next track, if it exist
-                let next_track_id = now_playing_idx
+                // Get the ID and title of the next track, if it exist
+                let next = now_playing_idx
                     .and_then(|i| i.checked_sub(1))
-                    .and_then(|i| self.entries.get(i))
-                    .map(|e| e.id.clone());
+                    .and_then(|i| self.entries.get(i));
 
                 // If the ID exists, play it
-                if let Some(id) = next_track_id {
-                    player_link.send_message(PlayerMsg::Play(id.clone()));
+                if let Some(n) = next {
+                    player_link.send_message(PlayerMsg::Play(n.clone()));
                 }
             }
             QueueMsg::PlayTrackAfter(article_id) => {
                 // Find the article ID in the queue
                 let now_playing_idx = self.entries.iter().position(|x| x.id == article_id);
                 // Get the ID of the prev track, if it exist
-                let prev_track_id = now_playing_idx
-                    .and_then(|i| self.entries.get(i + 1))
-                    .map(|e| e.id.clone());
+                let prev = now_playing_idx.and_then(|i| self.entries.get(i + 1));
 
                 // If the ID exists, play it
-                if let Some(id) = prev_track_id {
-                    player_link.send_message(PlayerMsg::Play(id.clone()));
+                if let Some(p) = prev {
+                    player_link.send_message(PlayerMsg::Play(p.clone()));
                 }
             }
         }
@@ -211,13 +208,15 @@ fn render_queue_item(
 ) -> Html {
     let player_scope = player_link.borrow().clone().unwrap();
     let queue_scope = queue_link.borrow().clone().unwrap();
-    let id = entry.id.clone();
+    let entry_copy = entry.clone();
 
+    // Define the callbacks for clicking the play button and delete button
     let play_callback = Callback::from(move |_| {
-        player_scope.send_message(PlayerMsg::Play(id.clone()));
+        player_scope.send_message(PlayerMsg::Play(entry_copy.clone()));
     });
     let remove_callback = queue_scope.callback(move |_| QueueMsg::Delete(pos));
 
+    // The ARIA text for the buttons
     let play_title_text = format!("Play: {}", entry.title);
     let delete_title_text = format!("Delete from queue: {}", entry.title);
 

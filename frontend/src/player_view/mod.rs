@@ -3,7 +3,7 @@ mod media_session;
 
 use crate::{
     caching,
-    queue_view::{ArticleId, Queue, QueueMsg},
+    queue_view::{ArticleId, Queue, QueueEntry, QueueMsg},
     utils, WeakComponentLink,
 };
 use audio_component::{Audio, AudioMsg, GlobalAudio};
@@ -99,7 +99,7 @@ pub struct Props {
 
 pub enum PlayerMsg {
     /// Play the given article
-    Play(ArticleId),
+    Play(QueueEntry),
 
     /// Ask the queue for the previous track
     AskForPrevTrack,
@@ -154,8 +154,8 @@ pub struct Player {
 /// Holds what's playing, how long it's been playing, and how fast
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PlayerState {
-    /// Handle of the currently playing article
-    now_playing: Option<ArticleId>,
+    /// Handle and title of the currently playing article
+    now_playing: Option<QueueEntry>,
     /// The audio playback speed, as a percentage
     playback_speed: f64,
 }
@@ -225,14 +225,14 @@ impl Component for Player {
         let queue_link = ctx.props().queue_link.borrow().clone().unwrap();
 
         match msg {
-            PlayerMsg::Play(id) => {
+            PlayerMsg::Play(queue_entry) => {
                 let player_link = ctx.link().clone();
 
                 // Change now-playing to the new article
-                self.state.now_playing = Some(id.clone());
+                self.state.now_playing = Some(queue_entry.clone());
 
                 // Load the track, play it, and save the player state to disk
-                tracing::debug!("Playing track {}", id.0);
+                tracing::debug!("Playing track {}", queue_entry.id.0);
                 spawn_local(async move {
                     // Do a useless play() action. This necessary because Safari is buggy and
                     // doesn't allow the first media action (like play or pause) to come from
@@ -241,7 +241,7 @@ impl Component for Player {
                     tracing::trace!("Did a fake play");
 
                     // Load the article and play it
-                    let new_elapsed = prepare_for_play(&id, &audio_link).await;
+                    let new_elapsed = prepare_for_play(&queue_entry.id, &audio_link).await;
                     audio_link.send_message(AudioMsg::Play);
 
                     // Save the new article with the new elapsed time to disk. This isn't done
@@ -263,8 +263,8 @@ impl Component for Player {
                 // Ask the queue to start playing the track that comes before
                 // self.state.now_playing
                 let now_playing = self.state.now_playing.clone();
-                if let Some(ref id) = &now_playing {
-                    queue_link.send_message(QueueMsg::PlayTrackBefore(id.clone()))
+                if let Some(ref entry) = now_playing {
+                    queue_link.send_message(QueueMsg::PlayTrackBefore(entry.id.clone()))
                 }
 
                 false
@@ -274,8 +274,8 @@ impl Component for Player {
                 // Ask the queue to start playing the track that comes after
                 // self.state.now_playing
                 let now_playing = self.state.now_playing.clone();
-                if let Some(ref id) = &now_playing {
-                    queue_link.send_message(QueueMsg::PlayTrackAfter(id.clone()))
+                if let Some(ref entry) = &now_playing {
+                    queue_link.send_message(QueueMsg::PlayTrackAfter(entry.id.clone()))
                 }
 
                 false
@@ -297,7 +297,7 @@ impl Component for Player {
 
             PlayerMsg::StopIfPlaying(id) => {
                 // Check if the given ID matches the currently playing article
-                if self.state.now_playing == Some(id) {
+                if self.state.now_playing.as_ref().map(|entry| &entry.id) == Some(&id) {
                     // On match, stop playing and clear the <audio> element of all information
                     audio_link.send_message(AudioMsg::Stop);
 
@@ -321,9 +321,9 @@ impl Component for Player {
                 set_playback_speed(self.state.playback_speed, &audio_link);
 
                 // Load up the article specified by now_playing
-                if let Some(handle) = self.state.now_playing.clone() {
+                if let Some(entry) = self.state.now_playing.clone() {
                     spawn_local(async move {
-                        prepare_for_play(&handle, &audio_link).await;
+                        prepare_for_play(&entry.id, &audio_link).await;
                     });
                 }
 
@@ -351,10 +351,10 @@ impl Component for Player {
                 // Collect the states to save. Player state holds now-playing and playback speed.
                 // Article state holds elapsed time
                 let player_state = self.state.clone();
-                let article_state = player_state
-                    .now_playing
-                    .clone()
-                    .map(|id| ArticleState { id, elapsed });
+                let article_state = player_state.now_playing.clone().map(|entry| ArticleState {
+                    id: entry.id,
+                    elapsed,
+                });
 
                 // Save the states
                 spawn_local(async move {
@@ -413,8 +413,8 @@ impl Component for Player {
                 GlobalAudio::pause();
             } else {
                 tracing::error!("Now playing = {:?}", &now_playing);
-                if let Some(id) = &now_playing {
-                    self_link.send_message(PlayerMsg::Play(id.clone()))
+                if let Some(entry) = now_playing.clone() {
+                    self_link.send_message(PlayerMsg::Play(entry))
                 }
             }
         });
@@ -434,7 +434,7 @@ impl Component for Player {
         let playback_speed_selector = render_playback_speed_selector(playback_speed_cb);
         let now_playing_str = now_playing
             .as_ref()
-            .map(|c| c.0.clone())
+            .map(|entry| entry.title.clone())
             .unwrap_or("[no article loaded]".to_string());
 
         let audio_link = self.audio_link.clone();

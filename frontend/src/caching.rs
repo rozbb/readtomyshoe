@@ -414,8 +414,8 @@ pub(crate) async fn load_article(id: &ArticleId) -> Result<CachedArticle, AnyErr
     // TODO: Eventually, remove the fallback option. This is just temporary so it doesn't break the
     // sessions from before `title` was saved
     let title = js_sys::Reflect::get(&serialized_article, &JsValue::from_str("title"))
-        .map(|t| t.as_string().unwrap())
-        .unwrap_or(id.clone());
+        .map_err(|e| wrap_jserror("couldn't get article title field", e))
+        .map(|t| t.as_string().unwrap_or(id.clone()))?;
     // Get the MP3 bytes
     let js_blob: Blob = js_sys::Reflect::get(&serialized_article, &JsValue::from_str("audio_blob"))
         .unwrap()

@@ -373,6 +373,14 @@ pub(crate) async fn save_article(article: &CachedArticle) -> Result<QueueEntry, 
     )
     .unwrap();
 
+    // Set the title
+    js_sys::Reflect::set(
+        &serialized_article,
+        &JsValue::from_str("title"),
+        &JsValue::from_str(&article.title),
+    )
+    .unwrap();
+
     // Set the blob
     let blob = {
         let bytes = js_sys::Uint8Array::from(article.audio_blob.as_slice());
@@ -397,10 +405,18 @@ pub(crate) async fn save_article(article: &CachedArticle) -> Result<QueueEntry, 
 pub(crate) async fn load_article(id: &ArticleId) -> Result<CachedArticle, AnyError> {
     // Request a get() operation on the table
     let serialized_article = table_get(ARTICLES_TABLE, &JsValue::from_str(&id.0)).await?;
+    // Get the article's unique ID
     let id = js_sys::Reflect::get(&serialized_article, &JsValue::from_str("id"))
         .map_err(|e| wrap_jserror("couldn't get article id field", e))?
         .as_string()
         .unwrap();
+    // Get the title, falling back on the ID if it's not set.
+    // TODO: Eventually, remove the fallback option. This is just temporary so it doesn't break the
+    // sessions from before `title` was saved
+    let title = js_sys::Reflect::get(&serialized_article, &JsValue::from_str("title"))
+        .map(|t| t.as_string().unwrap())
+        .unwrap_or(id.clone());
+    // Get the MP3 bytes
     let js_blob: Blob = js_sys::Reflect::get(&serialized_article, &JsValue::from_str("audio_blob"))
         .unwrap()
         .dyn_into()
@@ -410,7 +426,7 @@ pub(crate) async fn load_article(id: &ArticleId) -> Result<CachedArticle, AnyErr
 
     Ok(CachedArticle {
         id: ArticleId(id.clone()),
-        title: id,
+        title,
         audio_blob,
     })
 }

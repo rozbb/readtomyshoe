@@ -94,7 +94,6 @@ An incomplete to-do list, roughly in order of most important to least important:
 - [ ] Make playqueue reset time if the article is done(?)
 - [ ] Add an archive feature for articles whose audio has been pruned
 - [ ] Make it so that deleting an article from the queue deletes all its copies from the queue
-- [ ] Make filenames safe. Filenames should be alphanumeric and end with the hash of contents. Put title and URL in ID3 metadata. And when serving the file list, cache the metadata so we don't open all the files every call. Subpoint: use a filesystem watcher to update the metadata, and use Last-Modified-Since to save bandwidth
 - [ ] Write more accessible progress notifs for adding to queue, and error notifs for fetch and what not
 - [ ] Make the Dockerfile compatible with external volumes
 - [ ] Fix caching in dev mode (the trouble is that assets are in `/assets/` in prod, but `/` in dev)

@@ -38,13 +38,6 @@ label {
     font-weight: bold;
 }
 
-.dateAdded {
-    font-style: italic;
-    font-size: 0.8em;
-    margin: 0 0 0 2rem;
-}
-
-
 /*
  * Styling for the help box
  */
@@ -87,12 +80,18 @@ details p {
 /*
  * Library and queue buttons should be big and offset
  */
-li>button {
+li > button {
     font-size: 1.3rem;
+    margin-right: 1rem;
 }
 .libArticleTitle {
     padding: 0;
-    margin: 0 0 0 1rem;
+    margin: 0;
+}
+.articleMetadata {
+    font-style: italic;
+    font-size: 0.8em;
+    margin-left: 0.5rem;
 }
 .queueArticleTitle {
     margin: 0 1rem;
@@ -104,7 +103,7 @@ li>button {
 /*
  * Make the skip buttons big and offset from the audio scrubber and playback speed
  */
-.audiocontrol>button {
+.audiocontrol > button {
     margin-right: 1rem;
     font-size: 25px;
 }

@@ -21,6 +21,7 @@ wasm-bindgen-futures = "0.4"
 wasm-logger = "0.2"
 yew = "0.19"
 yew-router = "0.16"
+url = "2"
 urlencoding = "2"
 
 [dependencies.web-sys]

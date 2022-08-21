@@ -1293,6 +1293,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-wasm",
+ "url",
  "urlencoding",
  "wasm-bindgen",
  "wasm-bindgen-futures",

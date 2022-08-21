@@ -8,6 +8,7 @@ use common::{ArticleMetadata, LibraryCatalog};
 
 use anyhow::{bail, Error as AnyError};
 use gloo_net::http::Request;
+use url::Url;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use web_sys::PageTransitionEvent;
 use yew::{html::Scope, prelude::*};
@@ -56,7 +57,7 @@ pub async fn fetch_article(id: &str, title: &str) -> Result<CachedArticle, AnyEr
         );
     }
 
-    tracing::debug!("Got audio blob {:?}", resp);
+    tracing::info!("Got audio blob {:?}", resp);
 
     // Parse the binary
     let audio_blob = resp
@@ -90,6 +91,14 @@ fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> H
         title: title_copy.clone(),
     });
 
+    // Make a source URL link if it exists and is valid. Otherwise make this part empty.
+    let url = metadata
+        .source_url
+        .as_ref()
+        .and_then(|u| Url::parse(u).ok())
+        .map(|u| html! { <a href={ String::from(u) } title="Article source">{ "[source]" }</a> })
+        .unwrap_or(Html::default());
+
     // Format the date the article was added
     let lang = gloo_utils::window()
         .navigator()
@@ -103,7 +112,7 @@ fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> H
         js_date.to_locale_string(&lang, &JsValue::TRUE).into()
     });
     let date_added_str = match date_added {
-        Some(d) => format!("Added on {d}"),
+        Some(d) => format!("Added {d}"),
         None => format!("Date added unknown"),
     };
     let add_title_text = format!("Add to queue: {}", title);
@@ -120,7 +129,8 @@ fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> H
             </button>
             <div class="articleDetails">
                 <p aria-hidden="true" class="libArticleTitle">{ title }</p>
-                <p class="dateAdded">{ date_added_str }</p>
+                <span class="articleMetadata" title="Date added">{ date_added_str }</span>
+                <span class="articleMetadata">{ url }</span>
             </div>
         </li>
     }

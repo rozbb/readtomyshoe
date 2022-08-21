@@ -451,14 +451,6 @@ impl Component for Player {
                     >
                         { "⏮️" }
                     </button>
-                    <button
-                        aria-label="Play/Pause"
-                        title="Play/Pause"
-                        onclick={playpause_cb}
-                    >
-                        { "⏯" }
-                    </button>
-                    <br />
 
                     <button
                         aria-label="Jump backwards 10 seconds"

@@ -432,16 +432,16 @@ impl Component for Player {
         // Set nowplaying
         let now_playing = self.state.now_playing.clone();
         let playback_speed_selector = render_playback_speed_selector(playback_speed_cb);
-        let now_playing_str = now_playing
+        let now_playing_html = now_playing
             .as_ref()
-            .map(|entry| entry.title.clone())
-            .unwrap_or("[no article loaded]".to_string());
+            .map(|entry| html! {<span> {entry.title.clone()} </span>})
+            .unwrap_or(html! {<span style="font-style: italic">{"[no article loaded]"}</span>});
 
         let audio_link = self.audio_link.clone();
         html! {
             <section title="Player">
                 <h2>{ "Player" }</h2>
-                <p><strong>{ "Now Playing: " }</strong> { now_playing_str }</p>
+                <p><strong>{ "Now Playing: " }</strong> { now_playing_html }</p>
                 <Audio {audio_link} />
                 <div class="audiocontrol" title="More playback controls">
                     <button

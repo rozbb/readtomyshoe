@@ -183,12 +183,22 @@ impl Component for Queue {
         let player_link = &ctx.props().player_link;
         let queue_link = &ctx.props().queue_link;
 
-        let rendered_list = self
-            .entries
-            .iter()
-            .enumerate()
-            .map(|(i, entry)| render_queue_item(entry, i, player_link, queue_link))
-            .collect::<Html>();
+        // Render the list of queued articles. If there are none, then show some helpful text
+        let rendered_list = if self.entries.is_empty() {
+            html! {
+                <p style="font-style: italic">{"
+                    No articles in the queue. Click the \"+\" button next to an article below
+                    to add it to the queue.
+                "}</p>
+            }
+        } else {
+            self.entries
+                .iter()
+                .enumerate()
+                .map(|(i, entry)| render_queue_item(entry, i, player_link, queue_link))
+                .collect::<Html>()
+        };
+
         html! {
             <section title="Queue">
                 <h2>{ "Queue" }</h2>

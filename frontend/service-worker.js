@@ -42,13 +42,20 @@ self.addEventListener('fetch', (e) => {
 
     // Respond to asset fetches as follows
     e.respondWith((async () => {
-        // Try to fetch the resource normally
+        // Open the cache. Whether for reading or writing, we will use this.
         var cache = await caches.open(cacheName);
+
+        // Try to fetch the resource normally
         try {
             const response = await fetch(e.request);
-            // If fetch succeeded, cache the result and return it
-            cache.put(e.request, response.clone());
-            return response;
+            if (response.ok) {
+                // If fetch succeeded, cache the result and return it
+                cache.put(e.request, response.clone());
+                return response;
+            } else {
+                // If the fetch got anything other than a 2xx response code, error out
+                throw new Error("fetch got a non-succeeding status code");
+            }
         } catch {
             // If fetching fails, try to hit the cache
             const c = await caches.match(e.request);

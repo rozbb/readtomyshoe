@@ -48,7 +48,7 @@ pub fn register_service_worker() {
     let sw_container = gloo_utils::window().navigator().service_worker();
 
     // There's plenty of reasons we can't get a service worker. For one,
-    // we can only register a service worker in a "seucre context", i.e., if the website is running
+    // we can only register a service worker in a "secure context", i.e., if the website is running
     // on localhost or via HTTPS. Also, you can't register a service worker in Firefox in a private
     // browsing window. So to catch all of these, just return early if we can't get one.
     if sw_container.is_undefined() {

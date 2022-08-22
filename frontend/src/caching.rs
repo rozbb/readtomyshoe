@@ -3,10 +3,11 @@ use crate::{
     queue_view::{ArticleId, CachedArticle, Queue, QueueEntry},
 };
 
-use std::sync::Arc;
+use std::{cell::RefCell, sync::Arc};
 
 use anyhow::{anyhow, bail, Error as AnyError};
 use gloo_utils::window;
+use ringbuffer::AllocRingBuffer;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{
@@ -85,6 +86,13 @@ fn wrap_jserror(context_str: &'static str, v: JsValue) -> AnyError {
     anyhow!("{context_str}: {:?}", v)
 }
 
+// A thread-local place to save the callbacks associated with each get_db() call. We support 8
+// concurrent calls to the current DB before the callbacks (4 per call) start getting overwritten.
+thread_local!(
+    static GETDB_CALLBACKS: RefCell<AllocRingBuffer<Closure<dyn Fn(Event)>>> =
+        RefCell::new(AllocRingBuffer::with_capacity(8 * 4))
+);
+
 /// Returns a handle to the global IndexedDB object for our app
 pub(crate) async fn get_db() -> Result<IdbDatabase, AnyError> {
     let factory = window()
@@ -123,6 +131,14 @@ pub(crate) async fn get_db() -> Result<IdbDatabase, AnyError> {
     db_req.set_onerror(Some(error_cb.as_ref().unchecked_ref()));
     db_req.set_onblocked(Some(blocked_cb.as_ref().unchecked_ref()));
     db_req.set_onupgradeneeded(Some(upgradeneeded_cb.as_ref().unchecked_ref()));
+
+    // Save the callbacks so they don't get destroyed immediately
+    GETDB_CALLBACKS.with(|cbs| {
+        // Push the callbacks to the ring buffer. This will overwrite old (hopefully completed)
+        // callbacks
+        cbs.borrow_mut()
+            .extend([success_cb, error_cb, blocked_cb, upgradeneeded_cb]);
+    });
 
     // Wait for an event to trigger, and cancel the remaining branches
     tokio::select! {
@@ -198,6 +214,13 @@ async fn initialize_db(db: &IdbDatabase) -> Result<(), AnyError> {
     Ok(())
 }
 
+// A thread-local place to save the callbacks associated with each access_db() call We support 8
+// concurrent calls to the current DB before the callbacks (2 per call) start getting overwritten.
+thread_local!(
+    static ACCESSDB_CALLBACKS: RefCell<AllocRingBuffer<Closure<dyn Fn(Event)>>>
+        = RefCell::new(AllocRingBuffer::with_capacity(8 * 2))
+);
+
 /// A helper function that runs whatever you want on the specified table. `write` indicates whether
 /// `table_op` needs write access to the table. `table_op` takes a table and does some operations
 /// that result in an `IdbRequest`. Once that request is finished, returns the resulting `JsValue`.
@@ -245,6 +268,13 @@ where
     });
     req.set_onsuccess(Some(success_cb.as_ref().unchecked_ref()));
     req.set_onerror(Some(error_cb.as_ref().unchecked_ref()));
+
+    // Save the callbacks so they don't get destroyed immediately
+    ACCESSDB_CALLBACKS.with(move |cbs| {
+        // Push the callbacks to the ring buffer. This will overwrite old (hopefully completed)
+        // callbacks
+        cbs.borrow_mut().extend([success_cb, error_cb]);
+    });
 
     // Wait for an event to trigger, and cancel the remaining branches
     tokio::select! {

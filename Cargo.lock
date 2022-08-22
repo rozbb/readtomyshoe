@@ -39,6 +39,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c91f1f46651137be86f3a2b9a8359f9ab421d04d941c62b5982e1ca21113adf9"
 
 [[package]]
+name = "array-init"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bfb6d71005dc22a708c7496eee5c8dc0300ee47355de6256c3b35b12b5fef596"
+
+[[package]]
 name = "async-channel"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1287,6 +1293,7 @@ dependencies = [
  "gloo-utils",
  "js-sys",
  "log",
+ "ringbuffer",
  "serde",
  "serde-wasm-bindgen 0.4.3",
  "serde_bytes",
@@ -1385,6 +1392,15 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "winreg",
+]
+
+[[package]]
+name = "ringbuffer"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b30a00730a27595dcf899dce512aa031dd650f86aafcb132fd8dd9f409b369d0"
+dependencies = [
+ "array-init",
 ]
 
 [[package]]

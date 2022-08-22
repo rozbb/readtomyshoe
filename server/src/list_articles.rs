@@ -11,6 +11,7 @@ use std::{
 use common::{ArticleMetadata, LibraryCatalog};
 
 use axum::{extract::Extension, http::StatusCode, routing::get, Json, Router};
+use tower_http::compression::CompressionLayer;
 
 /// The in-memory metadata cache of all the articles in the library. There is currently no way to
 /// invalidate the cache, so if a file changes, the server needs to be restarted.
@@ -23,7 +24,8 @@ pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
         Router::new()
             .route("/list-articles", get(list_articles))
             .layer(Extension(audio_blob_dir.to_string()))
-            .layer(Extension(LibraryCache::default())),
+            .layer(Extension(LibraryCache::default()))
+            .layer(CompressionLayer::new()),
     )
 }
 

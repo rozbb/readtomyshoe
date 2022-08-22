@@ -33,7 +33,7 @@ label {
     margin-right: 0.5rem;
 }
 
-.navLink {
+a, .navLink {
     color: blue;
     font-weight: bold;
 }
@@ -152,7 +152,7 @@ fieldset input,textarea {
         background: #1b1b1b;
     }
 
-    .navLink {
+    a,.navLink {
         color: #5bf;
     }
 

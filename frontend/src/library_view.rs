@@ -252,7 +252,7 @@ impl Component for Library {
                 <section title="Library">
                     <h2>{ "Library" }</h2>
                     <div id="addArticle">
-                        <Link<Route> to={Route::Add} classes="navLink">
+                        <Link<Route> to={Route::Add}>
                             { "Add Article" }
                         </Link<Route>>
                     </div>

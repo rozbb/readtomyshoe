@@ -97,7 +97,7 @@ fn header() -> Html {
                 <dd>{"
                     The library tells you which articles you have already saved to ReadToMyShoe.
                     To add a new article to your library, click the
-                    "}<a class="navLink" href="#addArticle">{"Add Article"}</a>{"
+                    "}<a href="#addArticle">{"Add Article"}</a>{"
                     button. You cannot play articles directly from the library. Instead, if you
                     want to listen to an article, you first click the \"+\" button beside the
                     article in the library. This adds it to your queue, where it can be played.

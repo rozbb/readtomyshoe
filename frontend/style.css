@@ -8,6 +8,14 @@
 
 h1 {
     display: inline;
+    font-size: 24px;
+    vertical-align: middle;
+}
+
+.headerLogo {
+    margin-right: 1rem;
+    vertical-align: middle;
+    height: 50px;
 }
 
 body {
@@ -33,9 +41,20 @@ label {
     margin-right: 0.5rem;
 }
 
-a, .navLink {
+a, #helpLink {
     color: blue;
+    text-decoration: underline;
     font-weight: bold;
+}
+
+/* Nav bar is on the right side of the screen */
+nav {
+    float: right;
+}
+
+/* Space out the nav bar */
+nav *:not(:last-child) {
+    margin-right: 1rem;
 }
 
 /*
@@ -44,7 +63,6 @@ a, .navLink {
 
 details {
     display: inline;
-    float: right;
 }
 
 details[open] {
@@ -99,6 +117,10 @@ li > button {
 .queueDelete {
     margin-left: auto;
 }
+/* Source URL should not be bold like the rest of the <a> tags */
+li a {
+    font-weight: normal;
+}
 
 /*
  * Make the skip buttons big and offset from the audio scrubber and playback speed
@@ -152,7 +174,7 @@ fieldset input,textarea {
         background: #1b1b1b;
     }
 
-    a,.navLink {
+    a, #helpLink {
         color: #5bf;
     }
 

@@ -2,6 +2,9 @@ use crate::{library_view::Library, player_view::Player, queue_view::Queue, WeakC
 
 use yew::prelude::*;
 
+// TODO Fixme: This path is only valid in production mode
+const LOGO_PATH: &str = "/assets/rtms-color-180x180.png";
+
 pub struct Main {
     /// Indicates whether the app has access to an IndexedDb. If this is false, it's a fatal error
     has_db_access: bool,
@@ -145,11 +148,16 @@ fn header() -> Html {
 
     html! {
         <header>
-            <h1>{ "🥾 ReadToMyShoe" }</h1>
-            <details>
-                <summary class="navLink"><strong>{ "Help" }</strong></summary>
-                <div aria-live="polite">{ help_text }</div>
-            </details>
+            <img class="headerLogo" src={LOGO_PATH} />
+            <h1>{ "ReadToMyShoe" }</h1>
+            <nav>
+                <a href="https://github.com/rozbb/readtomyshoe">{"About"}</a>
+                <details>
+                    <summary><span id="helpLink">{ "Help" }</span></summary>
+                    <div aria-live="polite">{ help_text }</div>
+                </details>
+            </nav>
+            <hr />
         </header>
     }
 }

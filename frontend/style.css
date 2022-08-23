@@ -28,6 +28,7 @@ body {
 ul {
     list-style: none;
     padding-left: 0.3rem;
+    margin-top: 0;
 }
 
 li {
@@ -121,6 +122,25 @@ li > button {
 li a {
     font-weight: normal;
 }
+
+/*
+ * Library header styling
+ */
+#libraryHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#libraryHeader > h2 {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+#addArticle {
+    vertical-align: middle;
+}
+
 
 /*
  * Make the skip buttons big and offset from the audio scrubber and playback speed

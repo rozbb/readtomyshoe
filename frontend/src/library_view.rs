@@ -250,11 +250,13 @@ impl Component for Library {
                 .collect::<Html>();
             html! {
                 <section title="Library">
-                    <h2>{ "Library" }</h2>
-                    <div id="addArticle">
-                        <Link<Route> to={Route::Add}>
-                            { "Add Article" }
-                        </Link<Route>>
+                    <div id="libraryHeader">
+                        <h2>{ "Library" }</h2>
+                        <span id="addArticle">
+                            <Link<Route> to={Route::Add}>
+                                { "Add Article" }
+                            </Link<Route>>
+                        </span>
                     </div>
                     <ul role="list" aria-label="Library catalog">
                         { rendered_list }

@@ -148,7 +148,8 @@ fn header() -> Html {
 
     html! {
         <header>
-            <img class="headerLogo" src={LOGO_PATH} />
+            <img class="headerLogo" src={LOGO_PATH}
+             alt="ReadToMyShoe logo: A sneaker wearing a headset with a microphone" />
             <h1>{ "ReadToMyShoe" }</h1>
             <nav>
                 <a href="https://github.com/rozbb/readtomyshoe">{"About"}</a>

@@ -54,7 +54,7 @@ nav {
 }
 
 /* Space out the nav bar */
-nav *:not(:last-child) {
+nav > *:not(:last-child) {
     margin-right: 1rem;
 }
 

@@ -21,19 +21,24 @@ const ARTICLE_HASH_BITLEN: u64 = 128;
 
 /// Truncates a string to occupy at most `n` bytes
 fn truncate_to_bytes(s: &str, n: usize) -> &str {
+    // A codepoint in UTF-8 is at most 4 bytes. So the smallest we can guarantee truncation to is 4
+    // bytes.
     if n < 4 {
         panic!("Cannot guarantee a truncation with less than 4 bytes");
     }
 
     // Count the bytes of each character
     let mut byte_count = 0;
-    for (i, c) in s.chars().enumerate() {
-        byte_count += c.len_utf8();
+    for c in s.chars() {
+        let char_size = c.len_utf8();
 
         // If this character puts us over the byte limit, return the string up to and not including
         // this character
-        if byte_count > n {
-            return &s[..i];
+        if byte_count + char_size > n {
+            return &s[..byte_count];
+        } else {
+            // If this character is within the limit, add it to the count
+            byte_count += char_size;
         }
     }
 
@@ -41,6 +46,7 @@ fn truncate_to_bytes(s: &str, n: usize) -> &str {
 }
 
 /// Computes the zbase32 encoded hash of the given article. The output length is ARTICLE_HASH_LEN.
+///
 /// Panics: if `title.len() > 255`.
 fn hash_article(ArticleTextSubmission { title, body }: &ArticleTextSubmission) -> String {
     let mut h = Blake2s256::default();
@@ -65,7 +71,8 @@ pub fn derive_article_id(article: &ArticleTextSubmission) -> String {
     format!("{truncated_title}-{hash}.mp3")
 }
 
-/// Saves article metadata as ID3 tags in the MP3 file
+/// Saves article metadata as ID3 tags in the MP3 file:
+///
 ///     url -> Artist
 ///     title -> Title
 ///     date fetched  -> Recording Time
@@ -107,7 +114,8 @@ pub fn save_metadata(meta: &ArticleMetadata, audio_blob_dir: &str) -> Result<(),
         .map_err(Into::into)
 }
 
-/// Gets article metadata from ID3 tags in the MP3 file
+/// Gets article metadata from ID3 tags in the MP3 file:
+///
 ///     url <- Artist
 ///     title <- Title
 ///     date fetched  <- Recording Time (or else Unix last modified time)
@@ -163,4 +171,13 @@ pub fn get_metadata(entry: &DirEntry) -> Result<ArticleMetadata, AnyError> {
     }
 
     Ok(meta)
+}
+
+#[test]
+fn test_title_truncation() {
+    let title = "Money Stuff: AMC’s APEs Might Stick Around";
+    assert_eq!(
+        truncate_to_bytes(title, FILENAME_TITLE_MAXLEN),
+        "Money Stuff: AMC’s"
+    );
 }

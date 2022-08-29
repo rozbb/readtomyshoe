@@ -103,6 +103,14 @@ li > button {
     font-size: 1.3rem;
     margin-right: 1rem;
 }
+.downloadProgress {
+    text-align: center;
+    font-size: 0.8rem;
+    min-width: 2.2rem;
+    max-width: 2.2rem;
+    padding: 0;
+    margin-right: 0.5rem;
+}
 .libArticleTitle {
     padding: 0;
     margin: 0;

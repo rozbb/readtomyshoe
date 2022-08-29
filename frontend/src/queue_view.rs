@@ -54,7 +54,7 @@ impl From<&CachedArticle> for QueueEntry {
 }
 
 /// A handle to retrieve a cached article from storage. This is just the title for now
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ArticleId(pub(crate) String);
 
 #[derive(Clone, Serialize, Deserialize)]

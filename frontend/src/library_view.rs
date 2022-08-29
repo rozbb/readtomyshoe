@@ -6,11 +6,15 @@ use crate::{
 };
 use common::{ArticleMetadata, LibraryCatalog};
 
-use anyhow::{bail, Error as AnyError};
+use std::collections::BTreeMap;
+
+use anyhow::{anyhow, bail, Error as AnyError};
 use gloo_net::http::Request;
+use js_sys::{ArrayBuffer, Uint8Array};
 use url::Url;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
-use web_sys::PageTransitionEvent;
+use wasm_bindgen_futures::JsFuture;
+use web_sys::{PageTransitionEvent, ReadableStreamDefaultReader};
 use yew::{html::Scope, prelude::*};
 use yew_router::prelude::*;
 
@@ -37,8 +41,17 @@ async fn fetch_article_list() -> Result<LibraryCatalog, AnyError> {
         .map_err(|e| AnyError::from(e).context("Error parsing article list JSON"))
 }
 
+/// A helper function for methods that return JsValue as an error type
+fn wrap_jserror(context_str: &'static str, v: JsValue) -> AnyError {
+    anyhow::anyhow!("{context_str}: {:?}", v)
+}
+
 /// Fetches a specific article
-pub async fn fetch_article(id: &str, title: &str) -> Result<CachedArticle, AnyError> {
+async fn fetch_article_with_progress(
+    id: &str,
+    title: &str,
+    library_link: &Scope<Library>,
+) -> Result<CachedArticle, AnyError> {
     // Fetch the audio blobs
     let filename = format!("{id}.mp3");
     let encoded_title = urlencoding::encode(&filename);
@@ -57,13 +70,47 @@ pub async fn fetch_article(id: &str, title: &str) -> Result<CachedArticle, AnyEr
         );
     }
 
-    tracing::info!("Got audio blob {:?}", resp);
+    let reader: ReadableStreamDefaultReader = resp
+        .body()
+        .ok_or(AnyError::msg("could not get repsonse body"))?
+        .get_reader()
+        .dyn_into()
+        .unwrap();
 
-    // Parse the binary
-    let audio_blob = resp
-        .binary()
-        .await
-        .map_err(|e| AnyError::msg(format!("Error parsing audio binary: {e}")))?;
+    let mut audio_blob = Vec::new();
+    let blob_size = resp
+        .headers()
+        .get("content-length")
+        .unwrap()
+        .parse::<usize>()
+        .unwrap();
+
+    loop {
+        let chunk_promise = reader.read();
+        let chunk = JsFuture::from(chunk_promise)
+            .await
+            .map_err(|e| wrap_jserror("couldn't get chunk", e))?;
+        let done =
+            js_sys::Reflect::get(&chunk, &JsValue::from_str("done")).unwrap() == JsValue::TRUE;
+
+        if done {
+            break;
+        } else {
+            let val: ArrayBuffer = js_sys::Reflect::get(&chunk, &JsValue::from_str("value"))
+                .unwrap()
+                .unchecked_into();
+
+            let typed_buff: Uint8Array = Uint8Array::new(&val);
+            let slice_begin = audio_blob.len();
+            audio_blob.extend(core::iter::repeat(0u8).take(typed_buff.length() as usize));
+            typed_buff.copy_to(&mut audio_blob[slice_begin..]);
+
+            library_link.send_message(LibraryMsg::SetDownloadProgress {
+                id: ArticleId(id.to_string()),
+                progress: audio_blob.len() as f64 / blob_size as f64,
+            });
+        }
+    }
 
     // Return the article
     Ok(CachedArticle {
@@ -82,7 +129,11 @@ fn pageshow_callback(event: PageTransitionEvent, library_link: Scope<Library>) {
 }
 
 /// Renders an item in the library
-fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> Html {
+fn render_lib_item(
+    metadata: ArticleMetadata,
+    library_link: Scope<Library>,
+    download_progress: Option<f64>,
+) -> Html {
     let title = metadata.title.clone();
     let id = metadata.id.clone();
     let title_copy = title.clone();
@@ -117,8 +168,16 @@ fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> H
     };
     let add_title_text = format!("Add to queue: {}", title);
 
-    html! {
-        <li aria-label={ title.clone() }>
+    // If the article is downloading, display download progress instead of the "Add to Queue"
+    // button
+    let add_to_queue_button = if let Some(progress) = download_progress {
+        let progress_str = format!("{:.0}%", 100.0 * progress);
+        let aria_str = format!("Downloaded {progress_str} of {title}");
+        html! {
+            <p aria-label={aria_str} class="downloadProgress">{ progress_str }</p>
+        }
+    } else {
+        html! {
             <button
                 onclick={callback}
                 class="addToQueue"
@@ -127,6 +186,12 @@ fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> H
             >
                 { "+" }
             </button>
+        }
+    };
+
+    html! {
+        <li aria-label={ title.clone() }>
+            {add_to_queue_button}
             <div class="articleDetails">
                 <p aria-hidden="true" class="libArticleTitle">{ title }</p>
                 <span class="articleMetadata" title="Date added">{ date_added_str }</span>
@@ -140,6 +205,7 @@ fn render_lib_item(metadata: ArticleMetadata, library_link: Scope<Library>) -> H
 pub(crate) struct Library {
     err: Option<AnyError>,
     catalog: Option<LibraryCatalog>,
+    download_progresses: BTreeMap<ArticleId, f64>,
     _pageshow_action: Option<Closure<dyn 'static + Fn(PageTransitionEvent)>>,
 }
 
@@ -149,6 +215,7 @@ pub(crate) enum LibraryMsg {
     FetchArticle { id: String, title: String },
     FetchLibrary,
     PassArticleToQueue(QueueEntry),
+    SetDownloadProgress { id: ArticleId, progress: f64 },
 }
 
 #[derive(PartialEq, Properties)]
@@ -161,6 +228,8 @@ impl Component for Library {
     type Properties = Props;
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        let lib_link = ctx.link().clone();
+
         match msg {
             LibraryMsg::SetCatalog(catalog) => {
                 self.err = None;
@@ -183,10 +252,11 @@ impl Component for Library {
                 // post it
                 ctx.link()
                     .callback_future_once(|()| async move {
-                        let article = match fetch_article(&id, &title).await {
-                            Ok(a) => a,
-                            Err(e) => return LibraryMsg::SetError(e),
-                        };
+                        let article =
+                            match fetch_article_with_progress(&id, &title, &lib_link).await {
+                                Ok(a) => a,
+                                Err(e) => return LibraryMsg::SetError(e),
+                            };
 
                         let queue_entry = match caching::save_article(&article).await {
                             Ok(h) => h,
@@ -205,6 +275,11 @@ impl Component for Library {
                     .clone()
                     .unwrap()
                     .send_message(QueueMsg::Add(queue_entry));
+            }
+
+            LibraryMsg::SetDownloadProgress { id, progress } => {
+                tracing::error!("Downloaded {}% of {:?}", 100.0 * progress, id);
+                self.download_progresses.insert(id, progress);
             }
         }
 
@@ -246,7 +321,16 @@ impl Component for Library {
             let rendered_list = catalog
                 .0
                 .iter()
-                .map(|metadata| render_lib_item(metadata.clone(), ctx.link().clone()))
+                .map(|metadata| {
+                    let meta = metadata.clone();
+                    let link = ctx.link().clone();
+                    let download_progress = self
+                        .download_progresses
+                        .get(&ArticleId(meta.id.clone()))
+                        .cloned();
+
+                    render_lib_item(meta, link, download_progress)
+                })
                 .collect::<Html>();
             html! {
                 <section title="Library">
@@ -261,7 +345,11 @@ impl Component for Library {
                     <ul role="list" aria-label="Library catalog">
                         { rendered_list }
                     </ul>
-                <p id="libErrors" style={ "color: red;" } aria-live="assertive" aria-role="alert" title="errors">
+                <p
+                    id="libErrors"
+                    style={ "color: red;" }
+                    aria-live="assertive"
+                    aria-role="alert" title="errors">
                 </p>
                 </section>
             }

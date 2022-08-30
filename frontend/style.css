@@ -48,6 +48,10 @@ a, #helpLink {
     font-weight: bold;
 }
 
+p {
+    overflow-wrap: anywhere;
+}
+
 /* Nav bar is on the right side of the screen */
 nav {
     float: right;

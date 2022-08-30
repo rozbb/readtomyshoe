@@ -25,6 +25,7 @@ struct ExtractedArticle {
     text: String,
 }
 
+#[derive(Debug)]
 struct AddArticleError(anyhow::Error);
 
 impl From<anyhow::Error> for AddArticleError {
@@ -60,7 +61,13 @@ async fn add_article_by_text_endpoint(
 ) -> Result<String, AddArticleError> {
     // Just call down to add_article_by_text
     tracing::debug!("Adding article by text: '{}'", article.title);
-    let meta = add_article_by_text(&article, &audio_blob_dir).await?;
+    let meta = match add_article_by_text(&article, &audio_blob_dir).await {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::error!("Error adding by text: {:?}", e);
+            return Err(e);
+        }
+    };
 
     // Save the metadata in the ID3 tags
     let _ = save_metadata(&meta, &audio_blob_dir)
@@ -75,7 +82,13 @@ async fn add_article_by_url_endpoint(
     Extension(audio_blob_dir): Extension<String>,
 ) -> Result<String, AddArticleError> {
     tracing::debug!("Adding article by URL: {url}");
-    let meta = add_article_by_url(&url, &audio_blob_dir).await?;
+    let meta = match add_article_by_url(&url, &audio_blob_dir).await {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::error!("Error adding by url: {:?}", e);
+            return Err(e);
+        }
+    };
 
     // Save the metadata in the ID3 tags
     let _ = save_metadata(&meta, &audio_blob_dir)
@@ -92,26 +105,40 @@ async fn add_article_by_text(
     tracing::debug!("Processing article with title '{}'", article.title);
     let id = derive_article_id(&article);
 
-    // Open a new MP3 file. Fail if the file already exists
+    // Fail if the article already exists
     let savepath = Path::new(&audio_blob_dir).join(&id).with_extension("mp3");
-    let mut savefile = OpenOptions::new()
+    if savepath.exists() {
+        Err(anyhow!("File '{:?}' already exists", savepath))?;
+    }
+
+    // Open a temp file. This is so that list-articles won't try to read it while we're writing.
+    // Again, fail if the file exists.
+    let tmp_savepath = Path::new(&audio_blob_dir)
+        .join(&id)
+        .with_extension("mp3.tmp");
+    let mut tmp_savefile = OpenOptions::new()
         .write(true)
         .create(false)
         .create_new(true)
-        .open(&savepath)
-        .map_err(|e| anyhow!("Couldn't open savefile '{:?}': {:?}", savepath, e))?;
+        .open(&tmp_savepath)
+        .map_err(|e| anyhow!("Couldn't open tmp savefile '{:?}': {:?}", tmp_savepath, e))?;
 
     // Try to do a TTS and save to the savefile. On error, make sure to clean up the empty file
-    match tts_to_file(&mut savefile, &article).await {
-        Ok(_) => (),
-        Err(e) => {
+    tts_to_file(&mut tmp_savefile, &article)
+        .await
+        .map_err(|e| {
             // Remove the file
-            let _ = fs::remove_file(savepath)
-                .map_err(|e| tracing::error!("could not delete {id}: {e}"));
-            // Return with the error
-            return Err(e);
-        }
-    }
+            if let Err(f) = fs::remove_file(&tmp_savepath) {
+                let context = format!("could not delete {id}: {f}");
+                e.0.context(context).into()
+            } else {
+                e
+            }
+        })?;
+
+    // TTS was successful, change the filename
+    std::fs::rename(&tmp_savepath, &savepath)
+        .map_err(|e| anyhow!("could not rename {:?} to {:?}: {e}", tmp_savepath, savepath))?;
 
     // Get the current time. This is the official time the article was added to the library
     let unix_epoch_now = SystemTime::now()

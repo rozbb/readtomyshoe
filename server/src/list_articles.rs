@@ -59,7 +59,7 @@ async fn list_articles(
                 return None;
             }
 
-            // Try to open the cache
+            // Try to open the metadata cache
             if let Ok(mut cache) = metadata_cache.lock() {
                 let mut already_cached = true;
 
@@ -80,7 +80,7 @@ async fn list_articles(
 
                 meta
             } else {
-                // If the cache is poisoned, just get the metadata from the file
+                // If the cache lock is poisoned, just get the metadata from the file
                 get_metadata(&entry)
                     .map_err(|e| tracing::error!("Could not extract metadata: {e}"))
                     .ok()

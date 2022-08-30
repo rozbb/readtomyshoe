@@ -59,7 +59,7 @@ async fn add_article_by_text_endpoint(
     Extension(audio_blob_dir): Extension<String>,
 ) -> Result<String, AddArticleError> {
     // Just call down to add_article_by_text
-    tracing::debug!("Adding article '{}'", article.title);
+    tracing::debug!("Adding article by text: '{}'", article.title);
     let meta = add_article_by_text(&article, &audio_blob_dir).await?;
 
     // Save the metadata in the ID3 tags
@@ -74,6 +74,7 @@ async fn add_article_by_url_endpoint(
     Json(ArticleUrlSubmission { url }): Json<ArticleUrlSubmission>,
     Extension(audio_blob_dir): Extension<String>,
 ) -> Result<String, AddArticleError> {
+    tracing::debug!("Adding article by URL: {url}");
     let meta = add_article_by_url(&url, &audio_blob_dir).await?;
 
     // Save the metadata in the ID3 tags
@@ -88,6 +89,7 @@ async fn add_article_by_text(
     article: &ArticleTextSubmission,
     audio_blob_dir: &str,
 ) -> Result<ArticleMetadata, AddArticleError> {
+    tracing::debug!("Processing article with title '{}'", article.title);
     let id = derive_article_id(&article);
 
     // Open a new MP3 file. Fail if the file already exists
@@ -97,7 +99,7 @@ async fn add_article_by_text(
         .create(false)
         .create_new(true)
         .open(&savepath)
-        .map_err(|e| anyhow!("Couldn't open savefile: {:?}", e))?;
+        .map_err(|e| anyhow!("Couldn't open savefile '{:?}': {:?}", savepath, e))?;
 
     // Try to do a TTS and save to the savefile. On error, make sure to clean up the empty file
     match tts_to_file(&mut savefile, &article).await {

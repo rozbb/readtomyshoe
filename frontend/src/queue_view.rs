@@ -215,9 +215,9 @@ impl Component for Queue {
         html! {
             <section title="Queue">
                 <h2>{ "Queue" }</h2>
-                <ul role="list" aria-label="Queue entries">
+                <table role="list" aria-label="Queue entries">
                     { rendered_list }
-                </ul>
+                </table>
             </section>
         }
     }
@@ -244,24 +244,29 @@ fn render_queue_item(
     let delete_title_text = format!("Delete from queue: {}", entry.title);
 
     html! {
-        <li aria-label={ entry.title.clone() } class="queueControl">
-            <button
-                class="queuePlay"
-                aria-label={ play_title_text.clone() }
-                title={ play_title_text }
-                onclick={play_callback}
-            >
-                { "▶️" }
-            </button>
-            <p aria-hidden="true" class="queueArticleTitle"> {&entry.title} </p>
-            <button
-                class="queueDelete"
-                aria-label={ delete_title_text.clone() }
-                title={ delete_title_text }
-                onclick={remove_callback}
-            >
-                { "🗑" }
-            </button>
-        </li>
+        <tr role="listitem" aria-label={ entry.title.clone() } class="queueControl">
+            <td>
+                <button
+                    class="queuePlay"
+                    aria-label={ play_title_text.clone() }
+                    title={ play_title_text }
+                    onclick={play_callback}
+                >
+                    { "▶️" }
+                </button>
+            </td>
+            <td class="queueArticleTitle">
+                {&entry.title}
+            </td>
+            <td>
+                <button
+                    aria-label={ delete_title_text.clone() }
+                    title={ delete_title_text }
+                    onclick={remove_callback}
+                >
+                    { "🗑" }
+                </button>
+            </td>
+        </tr>
     }
 }

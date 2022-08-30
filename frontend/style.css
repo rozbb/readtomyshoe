@@ -29,19 +29,6 @@ button {
     font-size: 1.3rem;
 }
 
-ul {
-    list-style: none;
-    padding-left: 0.3rem;
-    margin-top: 0;
-}
-
-li {
-    padding: 0.25rem 0;
-    display: flex;
-    align-items: center;
-    margin-bottom: 0.5rem;
-}
-
 label {
     margin-right: 0.5rem;
 }
@@ -52,7 +39,7 @@ a, #helpLink {
     font-weight: bold;
 }
 
-p {
+p, .queueArticleTitle {
     overflow-wrap: anywhere;
 }
 
@@ -108,6 +95,8 @@ details p {
  * Library and queue buttons should be big and offset
  */
 td {
+    vertical-align: middle;
+    padding-top: 0;
     padding-bottom: 1rem;
 }
 .addToQueue {
@@ -129,10 +118,9 @@ td {
     margin-left: 0.5rem;
 }
 .queueArticleTitle {
-    margin: 0 1rem;
-}
-.queueDelete {
-    margin-left: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    width: 100%;
 }
 /* Source URL should not be bold like the rest of the <a> tags */
 .articleMetadata a {

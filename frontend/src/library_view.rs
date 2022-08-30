@@ -142,7 +142,6 @@ fn render_lib_item(
         html! {
             <button
                 onclick={callback}
-                class="addToQueue"
                 aria-label={ add_title_text.clone() }
                 title={ add_title_text }
             >
@@ -152,14 +151,14 @@ fn render_lib_item(
     };
 
     html! {
-        <li aria-label={ title.clone() }>
-            {add_to_queue_button}
-            <div class="articleDetails">
+        <tr role="listitem" aria-label={ title.clone() }>
+            <td class="addToQueue">{add_to_queue_button}</td>
+            <td class = "articleDetails">
                 <p aria-hidden="true" class="libArticleTitle">{ title }</p>
                 <span class="articleMetadata" title="Date added">{ date_added_str }</span>
                 <span class="articleMetadata">{ url }</span>
-            </div>
-        </li>
+            </td>
+        </tr>
     }
 }
 
@@ -332,9 +331,9 @@ impl Component for Library {
                             </Link<Route>>
                         </span>
                     </div>
-                    <ul role="list" aria-label="Library catalog">
+                    <table role="list" aria-label="Library catalog">
                         { rendered_list }
-                    </ul>
+                    </table>
                 <p
                     id="libErrors"
                     style={ "color: red;" }

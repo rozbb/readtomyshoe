@@ -25,6 +25,10 @@ body {
     max-width: 40em;
 }
 
+button {
+    font-size: 1.3rem;
+}
+
 ul {
     list-style: none;
     padding-left: 0.3rem;
@@ -103,16 +107,17 @@ details p {
 /*
  * Library and queue buttons should be big and offset
  */
-li > button {
-    font-size: 1.3rem;
-    margin-right: 1rem;
+td {
+    padding-bottom: 1rem;
+}
+.addToQueue {
+    padding-right: 1rem;
 }
 .downloadProgress {
+    font-size: 1.3rem;
     text-align: center;
-    min-width: 2.05rem;
-    max-width: 2.05rem;
     padding: 0;
-    margin-right: 0.5rem;
+    margin: 0;
 }
 .libArticleTitle {
     padding: 0;
@@ -130,7 +135,7 @@ li > button {
     margin-left: auto;
 }
 /* Source URL should not be bold like the rest of the <a> tags */
-li a {
+.articleMetadata a {
     font-weight: normal;
 }
 

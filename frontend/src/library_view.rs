@@ -122,18 +122,17 @@ fn render_lib_item(
 
     // If the article is downloading, display download progress instead of the "Add to Queue"
     // button
+    let elem_id = format!("lib-{}", metadata.id);
     let add_to_queue_button = if let Some(progress) = download_progress {
         match progress {
             DownloadProgress::InProgress => {
-                let aria_str = format!("Downloading {title}");
                 html! {
-                    <p aria-label={aria_str} class="downloadProgress">{ "..." }</p>
+                    <p id={elem_id} class="downloadProgress">{ "..." }</p>
                 }
             }
             DownloadProgress::Done => {
-                let aria_str = format!("Already in queue: {title}");
                 html! {
-                    <p aria-label={aria_str} class="downloadProgress">{ "✔︎" }</p>
+                    <p id={elem_id} class="downloadProgress">{ "✔︎" }</p>
                 }
             }
         }
@@ -141,6 +140,7 @@ fn render_lib_item(
         let add_title_text = format!("Add to queue: {}", title);
         html! {
             <button
+                id={elem_id}
                 onclick={callback}
                 aria-label={ add_title_text.clone() }
                 title={ add_title_text }
@@ -154,7 +154,7 @@ fn render_lib_item(
         <tr role="listitem" aria-label={ title.clone() }>
             <td class="addToQueue">{add_to_queue_button}</td>
             <td class = "articleDetails">
-                <p aria-hidden="true" class="libArticleTitle">{ title }</p>
+                <p class="libArticleTitle">{ title }</p>
                 <span class="articleMetadata" title="Date added">{ date_added_str }</span>
                 <span class="articleMetadata">{ url }</span>
             </td>

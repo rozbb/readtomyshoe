@@ -105,9 +105,8 @@ li > button {
 }
 .downloadProgress {
     text-align: center;
-    font-size: 0.8rem;
-    min-width: 2.2rem;
-    max-width: 2.2rem;
+    min-width: 2.05rem;
+    max-width: 2.05rem;
     padding: 0;
     margin-right: 0.5rem;
 }

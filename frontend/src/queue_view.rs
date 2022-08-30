@@ -1,5 +1,6 @@
 use crate::{
     caching,
+    library_view::{Library, LibraryMsg},
     player_view::{Player, PlayerMsg},
     WeakComponentLink,
 };
@@ -9,11 +10,13 @@ use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
 #[derive(PartialEq, Properties)]
-pub struct Props {
-    /// A link to myself. We have to set this on creation
-    pub queue_link: WeakComponentLink<Queue>,
+pub(crate) struct Props {
     /// A link to the Player component
     pub player_link: WeakComponentLink<Player>,
+    /// A link to myself. We have to set this on creation
+    pub queue_link: WeakComponentLink<Queue>,
+    /// A link to the Library component
+    pub library_link: WeakComponentLink<Library>,
 }
 
 /// An entry in the queue has the title and ID of the article
@@ -23,7 +26,7 @@ pub struct QueueEntry {
     pub(crate) title: String,
 }
 
-pub enum QueueMsg {
+pub(crate) enum QueueMsg {
     /// Adds the given entry to the queue
     Add(QueueEntry),
     /// Deletes the entry at the given index
@@ -58,7 +61,7 @@ impl From<&CachedArticle> for QueueEntry {
 pub struct ArticleId(pub(crate) String);
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct QueuePosition {
+pub(crate) struct QueuePosition {
     /// Title of article currently playing
     cur_article: ArticleId,
     /// Current timestamp in the playback
@@ -66,7 +69,7 @@ pub struct QueuePosition {
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
-pub struct Queue {
+pub(crate) struct Queue {
     entries: Vec<QueueEntry>,
 }
 
@@ -96,6 +99,8 @@ impl Component for Queue {
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         let player_link = ctx.props().player_link.borrow().clone().unwrap();
+        let library_link = ctx.props().library_link.borrow().clone().unwrap();
+
         match msg {
             QueueMsg::Delete(idx) => {
                 // Remove the entry from the queue and delete the article from the cache
@@ -103,6 +108,9 @@ impl Component for Queue {
 
                 // Tell the player to stop playing this track if it's playing
                 player_link.send_message(PlayerMsg::StopIfPlaying(entry.id.clone()));
+
+                // Tell the library to mark the article as not downloaded
+                library_link.send_message(LibraryMsg::MarkAsUnqueued(entry.id.clone()));
 
                 // Save the queue
                 self.save();
@@ -127,7 +135,12 @@ impl Component for Queue {
                 self.save()
             }
             QueueMsg::SetQueue(queue) => {
+                // Copy the IDs down
+                let queue_ids = queue.entries.iter().map(|entry| entry.id.clone()).collect();
+                // Set the queue
                 *self = queue;
+                // Tell the library what to mark as queued
+                library_link.send_message(LibraryMsg::MarkAsQueued(queue_ids));
             }
             QueueMsg::PlayTrackBefore(article_id) => {
                 // Find the article ID in the queue

@@ -1,5 +1,6 @@
 use crate::{
-    add_view::Add, main_view::Main, player_view::Player, queue_view::Queue, WeakComponentLink,
+    add_view::Add, library_view::Library, main_view::Main, player_view::Player, queue_view::Queue,
+    WeakComponentLink,
 };
 
 use yew::prelude::*;
@@ -18,8 +19,9 @@ pub enum Route {
 
 #[derive(Default)]
 pub struct App {
-    queue_link: WeakComponentLink<Queue>,
     player_link: WeakComponentLink<Player>,
+    queue_link: WeakComponentLink<Queue>,
+    library_link: WeakComponentLink<Library>,
 }
 
 impl Component for App {
@@ -35,16 +37,18 @@ impl Component for App {
     }
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
-        let queue_link_copy = self.queue_link.clone();
         let player_link_copy = self.player_link.clone();
+        let queue_link_copy = self.queue_link.clone();
+        let library_link_copy = self.library_link.clone();
 
         let switch = move |routes: &Route| {
-            let queue_link = queue_link_copy.clone();
             let player_link = player_link_copy.clone();
+            let queue_link = queue_link_copy.clone();
+            let library_link = library_link_copy.clone();
 
             match routes {
                 Route::Home => html! {
-                    <Main {queue_link} {player_link} />
+                    <Main {player_link} {queue_link} {library_link} />
                 },
                 Route::Add => html! {
                     <Add />

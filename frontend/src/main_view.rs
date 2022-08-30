@@ -5,7 +5,7 @@ use yew::prelude::*;
 // TODO Fixme: This path is only valid in production mode
 const LOGO_PATH: &str = "/assets/rtms-color-180x180.png";
 
-pub struct Main {
+pub(crate) struct Main {
     /// Indicates whether the app has access to an IndexedDb. If this is false, it's a fatal error
     has_db_access: bool,
 }
@@ -19,9 +19,10 @@ impl Default for Main {
 }
 
 #[derive(PartialEq, Properties)]
-pub struct Props {
-    pub queue_link: WeakComponentLink<Queue>,
+pub(crate) struct Props {
     pub player_link: WeakComponentLink<Player>,
+    pub queue_link: WeakComponentLink<Queue>,
+    pub library_link: WeakComponentLink<Library>,
 }
 
 pub enum Message {
@@ -57,8 +58,9 @@ impl Component for Main {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let queue_link = &ctx.props().queue_link;
         let player_link = &ctx.props().player_link;
+        let queue_link = &ctx.props().queue_link;
+        let library_link = &ctx.props().library_link;
 
         // If we don't have IndexedDB access, don't show anything
         if !self.has_db_access {
@@ -77,9 +79,9 @@ impl Component for Main {
         html! {
             <>
                 { header() }
-                <Player {queue_link} {player_link} />
-                <Queue {queue_link} {player_link} />
-                <Library {queue_link} />
+                <Player {player_link} {queue_link}  />
+                <Queue {player_link} {queue_link} {library_link} />
+                <Library {queue_link} {library_link} />
             </>
         }
     }

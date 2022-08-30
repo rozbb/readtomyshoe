@@ -90,14 +90,14 @@ fn trigger_save(periodic: bool, player: &Scope<Player>) {
 }
 
 #[derive(PartialEq, Properties)]
-pub struct Props {
+pub(crate) struct Props {
     /// A link to myself. We have to set this on creation
     pub player_link: WeakComponentLink<Player>,
     /// A link to the Queue component
     pub queue_link: WeakComponentLink<Queue>,
 }
 
-pub enum PlayerMsg {
+pub(crate) enum PlayerMsg {
     /// Play the given article
     Play(QueueEntry),
 
@@ -140,7 +140,7 @@ pub struct ArticleState {
 }
 
 /// The Player component of our app. This handles all the player logic.
-pub struct Player {
+pub(crate) struct Player {
     /// A link to the player's <audio> component
     audio_link: WeakComponentLink<Audio>,
     /// The closure that runs every PLAYER_STATE_SAVE_FREQ seconds saving the player state

@@ -8,13 +8,11 @@ use common::{ArticleMetadata, LibraryCatalog};
 
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, bail, Error as AnyError};
+use anyhow::{bail, Error as AnyError};
 use gloo_net::http::Request;
-use js_sys::{ArrayBuffer, Uint8Array};
 use url::Url;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
-use wasm_bindgen_futures::JsFuture;
-use web_sys::{PageTransitionEvent, ReadableStreamDefaultReader};
+use web_sys::PageTransitionEvent;
 use yew::{html::Scope, prelude::*};
 use yew_router::prelude::*;
 
@@ -41,17 +39,8 @@ async fn fetch_article_list() -> Result<LibraryCatalog, AnyError> {
         .map_err(|e| AnyError::from(e).context("Error parsing article list JSON"))
 }
 
-/// A helper function for methods that return JsValue as an error type
-fn wrap_jserror(context_str: &'static str, v: JsValue) -> AnyError {
-    anyhow::anyhow!("{context_str}: {:?}", v)
-}
-
 /// Fetches a specific article
-async fn fetch_article_with_progress(
-    id: &str,
-    title: &str,
-    library_link: &Scope<Library>,
-) -> Result<CachedArticle, AnyError> {
+async fn fetch_article(id: &str, title: &str) -> Result<CachedArticle, AnyError> {
     // Fetch the audio blobs
     let filename = format!("{id}.mp3");
     let encoded_title = urlencoding::encode(&filename);
@@ -70,47 +59,11 @@ async fn fetch_article_with_progress(
         );
     }
 
-    let reader: ReadableStreamDefaultReader = resp
-        .body()
-        .ok_or(AnyError::msg("could not get repsonse body"))?
-        .get_reader()
-        .dyn_into()
-        .unwrap();
-
-    let mut audio_blob = Vec::new();
-    let blob_size = resp
-        .headers()
-        .get("content-length")
-        .unwrap()
-        .parse::<usize>()
-        .unwrap();
-
-    loop {
-        let chunk_promise = reader.read();
-        let chunk = JsFuture::from(chunk_promise)
-            .await
-            .map_err(|e| wrap_jserror("couldn't get chunk", e))?;
-        let done =
-            js_sys::Reflect::get(&chunk, &JsValue::from_str("done")).unwrap() == JsValue::TRUE;
-
-        if done {
-            break;
-        } else {
-            let val: ArrayBuffer = js_sys::Reflect::get(&chunk, &JsValue::from_str("value"))
-                .unwrap()
-                .unchecked_into();
-
-            let typed_buff: Uint8Array = Uint8Array::new(&val);
-            let slice_begin = audio_blob.len();
-            audio_blob.extend(core::iter::repeat(0u8).take(typed_buff.length() as usize));
-            typed_buff.copy_to(&mut audio_blob[slice_begin..]);
-
-            library_link.send_message(LibraryMsg::SetDownloadProgress {
-                id: ArticleId(id.to_string()),
-                progress: audio_blob.len() as f64 / blob_size as f64,
-            });
-        }
-    }
+    // Parse the binary
+    let audio_blob = resp
+        .binary()
+        .await
+        .map_err(|e| AnyError::msg(format!("Error parsing audio binary: {e}")))?;
 
     // Return the article
     Ok(CachedArticle {
@@ -132,7 +85,7 @@ fn pageshow_callback(event: PageTransitionEvent, library_link: Scope<Library>) {
 fn render_lib_item(
     metadata: ArticleMetadata,
     library_link: Scope<Library>,
-    download_progress: Option<f64>,
+    download_progress: Option<DownloadProgress>,
 ) -> Html {
     let title = metadata.title.clone();
     let id = metadata.id.clone();
@@ -166,17 +119,26 @@ fn render_lib_item(
         Some(d) => format!("Added {d}"),
         None => format!("Date added unknown"),
     };
-    let add_title_text = format!("Add to queue: {}", title);
 
     // If the article is downloading, display download progress instead of the "Add to Queue"
     // button
     let add_to_queue_button = if let Some(progress) = download_progress {
-        let progress_str = format!("{:.0}%", 100.0 * progress);
-        let aria_str = format!("Downloaded {progress_str} of {title}");
-        html! {
-            <p aria-label={aria_str} class="downloadProgress">{ progress_str }</p>
+        match progress {
+            DownloadProgress::InProgress => {
+                let aria_str = format!("Downloading {title}");
+                html! {
+                    <p aria-label={aria_str} class="downloadProgress">{ "..." }</p>
+                }
+            }
+            DownloadProgress::Done => {
+                let aria_str = format!("Already in queue: {title}");
+                html! {
+                    <p aria-label={aria_str} class="downloadProgress">{ "✔︎" }</p>
+                }
+            }
         }
     } else {
+        let add_title_text = format!("Add to queue: {}", title);
         html! {
             <button
                 onclick={callback}
@@ -201,11 +163,18 @@ fn render_lib_item(
     }
 }
 
+/// Denotes whether a library item is downloading or done downloading
+#[derive(Copy, Clone, Debug)]
+enum DownloadProgress {
+    InProgress,
+    Done,
+}
+
 #[derive(Default)]
 pub(crate) struct Library {
     err: Option<AnyError>,
     catalog: Option<LibraryCatalog>,
-    download_progresses: BTreeMap<ArticleId, f64>,
+    download_progresses: BTreeMap<ArticleId, DownloadProgress>,
     _pageshow_action: Option<Closure<dyn 'static + Fn(PageTransitionEvent)>>,
 }
 
@@ -215,12 +184,14 @@ pub(crate) enum LibraryMsg {
     FetchArticle { id: String, title: String },
     FetchLibrary,
     PassArticleToQueue(QueueEntry),
-    SetDownloadProgress { id: ArticleId, progress: f64 },
+    MarkAsQueued(Vec<ArticleId>),
+    MarkAsUnqueued(ArticleId),
 }
 
 #[derive(PartialEq, Properties)]
-pub struct Props {
+pub(crate) struct Props {
     pub queue_link: WeakComponentLink<Queue>,
+    pub library_link: WeakComponentLink<Library>,
 }
 
 impl Component for Library {
@@ -228,8 +199,6 @@ impl Component for Library {
     type Properties = Props;
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
-        let lib_link = ctx.link().clone();
-
         match msg {
             LibraryMsg::SetCatalog(catalog) => {
                 self.err = None;
@@ -248,15 +217,18 @@ impl Component for Library {
                 });
             }
             LibraryMsg::FetchArticle { id, title } => {
+                // Mark the fetch as in-progress
+                self.download_progresses
+                    .insert(ArticleId(id.clone()), DownloadProgress::InProgress);
+
                 // Fetch an article, save it, and relay the article handle. If there's an error,
                 // post it
                 ctx.link()
                     .callback_future_once(|()| async move {
-                        let article =
-                            match fetch_article_with_progress(&id, &title, &lib_link).await {
-                                Ok(a) => a,
-                                Err(e) => return LibraryMsg::SetError(e),
-                            };
+                        let article = match fetch_article(&id, &title).await {
+                            Ok(a) => a,
+                            Err(e) => return LibraryMsg::SetError(e),
+                        };
 
                         let queue_entry = match caching::save_article(&article).await {
                             Ok(h) => h,
@@ -268,6 +240,10 @@ impl Component for Library {
                     .emit(());
             }
             LibraryMsg::PassArticleToQueue(queue_entry) => {
+                // Mark the article as downloaded
+                self.download_progresses
+                    .insert(queue_entry.id.clone(), DownloadProgress::Done);
+
                 // If we saved an article, pass the notif to the queue
                 ctx.props()
                     .queue_link
@@ -277,9 +253,17 @@ impl Component for Library {
                     .send_message(QueueMsg::Add(queue_entry));
             }
 
-            LibraryMsg::SetDownloadProgress { id, progress } => {
-                tracing::error!("Downloaded {}% of {:?}", 100.0 * progress, id);
-                self.download_progresses.insert(id, progress);
+            LibraryMsg::MarkAsQueued(ids) => {
+                // Mark the article as downloaded
+                ids.iter().for_each(|id| {
+                    self.download_progresses
+                        .insert(id.clone(), DownloadProgress::Done);
+                })
+            }
+
+            LibraryMsg::MarkAsUnqueued(id) => {
+                // Mark the article as not downloaded
+                self.download_progresses.remove(&id);
             }
         }
 
@@ -287,6 +271,12 @@ impl Component for Library {
     }
 
     fn create(ctx: &Context<Self>) -> Self {
+        // Set the queue link to this Library
+        ctx.props()
+            .library_link
+            .borrow_mut()
+            .replace(ctx.link().clone());
+
         // Kick of a future that will fetch the article list
         ctx.link().send_future(async move {
             match fetch_article_list().await {

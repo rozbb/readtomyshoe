@@ -10,11 +10,22 @@ use std::collections::BTreeMap;
 
 use anyhow::{bail, Error as AnyError};
 use gloo_net::http::Request;
+use js_sys::{ArrayBuffer, Uint8Array};
 use url::Url;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
-use web_sys::PageTransitionEvent;
+use wasm_bindgen_futures::spawn_local;
+use wasm_bindgen_futures::JsFuture;
+use web_sys::{
+    PageTransitionEvent, ReadableStream, ReadableStreamDefaultController,
+    ReadableStreamDefaultReader,
+};
 use yew::{html::Scope, prelude::*};
 use yew_router::prelude::*;
+
+/// A helper function for methods that return JsValue as an error type
+fn wrap_jserror(context_str: &'static str, v: JsValue) -> AnyError {
+    anyhow::anyhow!("{context_str}: {:?}", v)
+}
 
 /// Fetches the list of articles
 async fn fetch_article_list() -> Result<LibraryCatalog, AnyError> {
@@ -39,6 +50,58 @@ async fn fetch_article_list() -> Result<LibraryCatalog, AnyError> {
         .map_err(|e| AnyError::from(e).context("Error parsing article list JSON"))
 }
 
+// This pattern was taken from
+// https://github.com/AnthumChris/fetch-progress-indicators/blob/efaaaf073bc6927a803e5963a92ba9b11a585cc0/fetch-basic/supported-browser.js
+async fn read_inc(
+    num_bytes_expected: usize,
+    reader: ReadableStreamDefaultReader,
+    controller: ReadableStreamDefaultController,
+) {
+    let mut num_bytes_read = 0;
+
+    let mut acc = String::new();
+
+    loop {
+        let chunk_promise = reader.read();
+        let chunk = match JsFuture::from(chunk_promise).await {
+            Ok(c) => c,
+            Err(e) => {
+                ReadableStreamDefaultController::error_with_e(&controller, &e);
+                return;
+            }
+        };
+
+        let done =
+            js_sys::Reflect::get(&chunk, &JsValue::from_str("done")).unwrap() == JsValue::TRUE;
+
+        if done {
+            let _ = ReadableStreamDefaultController::close(&controller);
+            return;
+        } else {
+            // Get the chunk and append it to the queue
+            let val = js_sys::Reflect::get(&chunk, &JsValue::from_str("value")).unwrap();
+            controller.enqueue_with_chunk(&val);
+
+            // Update the number of bytes read
+            let chunk_size = val.unchecked_into::<ArrayBuffer>().byte_length();
+            num_bytes_read += chunk_size;
+
+            let progress = 100.0 * num_bytes_read as f64 / num_bytes_expected as f64;
+            tracing::error!("Fetched {progress}%");
+
+            //let typed_buff: Uint8Array = Uint8Array::new(&val);
+            //let slice_begin = audio_blob.len();
+            //audio_blob.extend(core::iter::repeat(0u8).take(typed_buff.length() as usize));
+            //typed_buff.copy_to(&mut audio_blob[slice_begin..]);
+
+            //library_link.send_message(LibraryMsg::SetDownloadProgress {
+            //    id: ArticleId(id.to_string()),
+            //    progress: audio_blob.len() as f64 / blob_size as f64,
+            //});
+        }
+    }
+}
+
 /// Fetches a specific article
 async fn fetch_article(id: &str, title: &str) -> Result<CachedArticle, AnyError> {
     // Fetch the audio blobs
@@ -58,6 +121,66 @@ async fn fetch_article(id: &str, title: &str) -> Result<CachedArticle, AnyError>
             resp.status_text()
         );
     }
+
+    let blob_size = resp
+        .headers()
+        .get("content-length")
+        .unwrap()
+        .parse::<usize>()
+        .unwrap();
+
+    let reader = resp
+        .body()
+        .ok_or(AnyError::msg("could not get repsonse body"))?
+        .get_reader()
+        .dyn_into::<JsValue>()
+        .unwrap();
+    tracing::error!("reader is {:?}", reader);
+    tracing::error!("reader type is {:?}", reader.js_typeof().as_string());
+    let keys = js_sys::Reflect::own_keys(&reader).unwrap();
+    for i in 0..keys.length() {
+        let k = keys.get(i as u32);
+        tracing::error!("reader has a key '{}'", k.as_string().unwrap());
+    }
+
+    let reader: ReadableStreamDefaultReader = reader.unchecked_into();
+    /*
+    let reader: ReadableStreamDefaultReader = reader
+        .dyn_into()
+        .map_err(|e| tracing::error!("Not a ReadableStreamDefault reader. {:?}", e))
+        .unwrap();
+    */
+
+    // let pageshow_cb = Closure::new(move |evt| pageshow_callback(evt, link.clone()));
+    let start_cb = Closure::once(move |controller: ReadableStreamDefaultController| {
+        spawn_local(async move {
+            read_inc(blob_size, reader, controller).await;
+        })
+    });
+
+    let readable_stream_callbacks = js_sys::Object::default();
+    js_sys::Reflect::set(
+        readable_stream_callbacks.as_ref(),
+        &JsValue::from_str("start"),
+        start_cb.as_ref(),
+    );
+
+    let readable_stream =
+        ReadableStream::new_with_underlying_source(&readable_stream_callbacks).unwrap();
+    let resp = {
+        let raw = web_sys::Response::new_with_opt_readable_stream(Some(&readable_stream)).unwrap();
+        gloo_net::http::Response::from_raw(raw)
+    };
+
+    if !resp.ok() {
+        bail!(
+            "Error fetching article {} ({})",
+            resp.status(),
+            resp.status_text()
+        );
+    }
+
+    tracing::info!("Got audio blob {:?}", resp);
 
     // Parse the binary
     let audio_blob = resp

@@ -4,3 +4,19 @@ members = [
     "frontend",
     "server",
 ]
+
+[patch.crates-io.web-sys]
+git = "https://github.com/rozbb/wasm-bindgen.git"
+rev = "46c450cb5fc1c7924bf58ef295d656b2b3c84678"
+
+[patch.crates-io.js-sys]
+git = "https://github.com/rozbb/wasm-bindgen.git"
+rev = "46c450cb5fc1c7924bf58ef295d656b2b3c84678"
+
+[patch.crates-io.wasm-bindgen]
+git = "https://github.com/rozbb/wasm-bindgen.git"
+rev = "46c450cb5fc1c7924bf58ef295d656b2b3c84678"
+
+[patch.crates-io.wasm-bindgen-futures]
+git = "https://github.com/rozbb/wasm-bindgen.git"
+rev = "46c450cb5fc1c7924bf58ef295d656b2b3c84678"

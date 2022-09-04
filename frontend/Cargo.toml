@@ -33,6 +33,7 @@ features = [
     "MediaImage", "ServiceWorkerContainer", "RegistrationOptions", "IdbFactory", "IdbOpenDbRequest",
     "IdbDatabase", "IdbObjectStore", "IdbObjectStoreParameters", "IdbTransaction",
     "IdbTransactionMode", "ReadableStream", "PageTransitionEvent", "ReadableStreamDefaultReader",
+    "ReadableStreamDefaultController",
 ]
 
 [dependencies.common]

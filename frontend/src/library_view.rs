@@ -220,17 +220,21 @@ pub(crate) struct Library {
 }
 
 pub(crate) enum LibraryMsg {
-    // Sets the Library catalog to the given value
+    /// Sets the Library catalog to the given value
     SetCatalog(LibraryCatalog),
-    // Sets the Library's error display to the given error
+    /// Sets the Library's error display to the given error
     SetError(AnyError),
-    // Tells the library to do a fetch() for the specific article
+    /// Tells the library to do a fetch() for the specific article
     FetchArticle { id: ArticleId, title: String },
-    // Tells the library to fetch() the catalog
+    /// Tells the library to fetch() the catalog
     FetchCatalog,
+    /// Updates the download progress of the given article
     SetDownloadProgress { id: ArticleId, progress: f64 },
+    /// Tells the Library to send the given queue entry to the Queue
     PassArticleToQueue(QueueEntry),
+    /// Sets the given articles as "Downloaded" in the library view
     MarkAsQueued(Vec<ArticleId>),
+    /// Sets the given article as Not Downloaded in the library view
     MarkAsUnqueued(ArticleId),
 }
 

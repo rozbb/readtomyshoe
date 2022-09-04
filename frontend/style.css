@@ -107,6 +107,9 @@ td {
 .addToQueue {
     padding-right: 1rem;
 }
+.addToQueue button {
+    width: 3.5rem;
+}
 .percentage {
     font-size: 0.7rem;
 }

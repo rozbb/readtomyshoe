@@ -1,5 +1,4 @@
 use anyhow::Error as AnyError;
-use gloo_net::http::Response;
 use js_sys::Uint8Array;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
@@ -37,9 +36,9 @@ pub fn run_after_delay(closure: &Closure<dyn Fn()>, secs: i32) {
 // was taken from
 // https://github.com/AnthumChris/fetch-progress-indicators/blob/efaaaf073bc6927a803e5963a92ba9b11a585cc0/fetch-basic/supported-browser.js
 pub(crate) fn response_with_read_callback<F: 'static + FnMut(Uint8Array)>(
-    resp: Response,
+    resp: gloo_net::http::Response,
     mut callback: F,
-) -> Result<Response, AnyError> {
+) -> Result<gloo_net::http::Response, AnyError> {
     // Extract the reader from the given response
     let reader: ReadableStreamDefaultReader = resp
         .body()

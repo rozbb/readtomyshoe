@@ -144,16 +144,35 @@ fn render_lib_item(
     // If the article is downloading, display download progress instead of the "Add to Queue"
     // button
     let elem_id = format!("lib-{}", metadata.id);
+
     let add_to_queue_button = if let Some(progress) = download_progress {
         match progress {
-            DownloadProgress::InProgress(pct) => {
+            DownloadProgress::InProgress(fraction) => {
+                let pct = format!("{}%", (100.0 * fraction).floor() as usize);
                 html! {
-                    <p id={elem_id} class="downloadProgress">{ format!("{:0.02}", pct) }</p>
+                    <button
+                        class="percentage"
+                        id={elem_id}
+                        aria-label={ pct.clone() }
+                        title={ pct.clone() }
+                        disabled=true
+                    >
+                        { pct }
+                    </button>
                 }
             }
             DownloadProgress::Done => {
+                let add_title_text = format!("Downloaded {title}");
                 html! {
-                    <p id={elem_id} class="downloadProgress">{ "✔︎" }</p>
+                    <button
+                        class="downloadDone"
+                        id={elem_id}
+                        aria-label={ add_title_text.clone() }
+                        title={ add_title_text }
+                        disabled=true
+                    >
+                        { "✔︎" }
+                    </button>
                 }
             }
         }
@@ -176,7 +195,7 @@ fn render_lib_item(
             <td class="addToQueue">{add_to_queue_button}</td>
             <td class = "articleDetails">
                 <p class="libArticleTitle">{ title }</p>
-                <span class="articleMetadata" title="Date added">{ date_added_str }</span>
+                <span class="articleMetadata">{ date_added_str }</span>
                 <span class="articleMetadata">{ url }</span>
             </td>
         </tr>

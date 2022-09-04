@@ -29,6 +29,11 @@ button {
     font-size: 1.3rem;
 }
 
+/* Submit buttons are normal size */
+button[type="submit"] {
+    font-size: 1rem;
+}
+
 label {
     margin-right: 0.5rem;
 }
@@ -102,11 +107,8 @@ td {
 .addToQueue {
     padding-right: 1rem;
 }
-.downloadProgress {
-    font-size: 1.3rem;
-    text-align: center;
-    padding: 0;
-    margin: 0;
+.percentage {
+    font-size: 0.7rem;
 }
 .libArticleTitle {
     padding: 0;

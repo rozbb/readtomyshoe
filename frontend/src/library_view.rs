@@ -17,7 +17,7 @@ use yew::{html::Scope, prelude::*};
 use yew_router::prelude::*;
 
 /// Fetches the list of articles
-async fn fetch_article_list() -> Result<LibraryCatalog, AnyError> {
+async fn fetch_catalog() -> Result<LibraryCatalog, AnyError> {
     tracing::debug!("Fetching article list");
     let resp = Request::get("/api/list-articles")
         .send()
@@ -39,7 +39,7 @@ async fn fetch_article_list() -> Result<LibraryCatalog, AnyError> {
         .map_err(|e| AnyError::from(e).context("Error parsing article list JSON"))
 }
 
-/// Fetches a specific article
+/// Fetches a specific article. The `lib_link` parameter is so it can report fetch progress.
 async fn fetch_article(
     id: &ArticleId,
     title: &str,
@@ -99,14 +99,6 @@ async fn fetch_article(
         id: id.clone(),
         audio_blob,
     })
-}
-
-/// Callback for "pageshow" event. Gets triggered whenever this page gets shown due to navigation
-fn pageshow_callback(event: PageTransitionEvent, library_link: Scope<Library>) {
-    // If the page is loading from a cache, force it to reload the library
-    if event.persisted() {
-        library_link.send_message(LibraryMsg::FetchLibrary);
-    }
 }
 
 /// Renders an item in the library
@@ -191,13 +183,15 @@ fn render_lib_item(
     }
 }
 
-/// Denotes whether a library item is downloading or done downloading
+/// Describes whether an article is downloading (and if so, how much of it has downloaded), or if
+/// it's done downloading
 #[derive(Copy, Clone, Debug)]
 enum DownloadProgress {
     InProgress(f64),
     Done,
 }
 
+// The main state of the Library view
 #[derive(Default)]
 pub(crate) struct Library {
     err: Option<AnyError>,
@@ -207,10 +201,14 @@ pub(crate) struct Library {
 }
 
 pub(crate) enum LibraryMsg {
+    // Sets the Library catalog to the given value
     SetCatalog(LibraryCatalog),
+    // Sets the Library's error display to the given error
     SetError(AnyError),
+    // Tells the library to do a fetch() for the specific article
     FetchArticle { id: ArticleId, title: String },
-    FetchLibrary,
+    // Tells the library to fetch() the catalog
+    FetchCatalog,
     SetDownloadProgress { id: ArticleId, progress: f64 },
     PassArticleToQueue(QueueEntry),
     MarkAsQueued(Vec<ArticleId>),
@@ -239,9 +237,9 @@ impl Component for Library {
                 self.catalog = None;
                 self.err = Some(err);
             }
-            LibraryMsg::FetchLibrary => {
+            LibraryMsg::FetchCatalog => {
                 ctx.link().send_future(async move {
-                    match fetch_article_list().await {
+                    match fetch_catalog().await {
                         Ok(list) => LibraryMsg::SetCatalog(list),
                         Err(e) => LibraryMsg::SetError(e.into()),
                     }
@@ -311,15 +309,21 @@ impl Component for Library {
 
         // Kick of a future that will fetch the article list
         ctx.link().send_future(async move {
-            match fetch_article_list().await {
+            match fetch_catalog().await {
                 Ok(list) => LibraryMsg::SetCatalog(list),
                 Err(e) => LibraryMsg::SetError(e.into()),
             }
         });
 
-        // Save the pageshow callback and set it on document.window
-        let link = ctx.link().clone();
-        let pageshow_cb = Closure::new(move |evt| pageshow_callback(evt, link.clone()));
+        // Save the pageshow callback and set it on document.window. This is so that when you hit
+        // the back button from adding an article, it will try to reload the catalog.
+        let lib_link = ctx.link().clone();
+        let pageshow_cb = Closure::new(move |evt: PageTransitionEvent| {
+            // If the page is loading from a cache, force it to reload the library
+            if evt.persisted() {
+                lib_link.send_message(LibraryMsg::FetchCatalog)
+            }
+        });
         gloo_utils::window()
             .add_event_listener_with_callback("pageshow", pageshow_cb.as_ref().unchecked_ref())
             .expect("couldn't register pageshow callback");

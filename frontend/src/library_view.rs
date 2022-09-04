@@ -10,22 +10,11 @@ use std::collections::BTreeMap;
 
 use anyhow::{bail, Error as AnyError};
 use gloo_net::http::Request;
-use js_sys::{ArrayBuffer, Uint8Array};
 use url::Url;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
-use wasm_bindgen_futures::spawn_local;
-use wasm_bindgen_futures::JsFuture;
-use web_sys::{
-    PageTransitionEvent, ReadableStream, ReadableStreamDefaultController,
-    ReadableStreamDefaultReader,
-};
+use web_sys::PageTransitionEvent;
 use yew::{html::Scope, prelude::*};
 use yew_router::prelude::*;
-
-/// A helper function for methods that return JsValue as an error type
-fn wrap_jserror(context_str: &'static str, v: JsValue) -> AnyError {
-    anyhow::anyhow!("{context_str}: {:?}", v)
-}
 
 /// Fetches the list of articles
 async fn fetch_article_list() -> Result<LibraryCatalog, AnyError> {
@@ -50,68 +39,20 @@ async fn fetch_article_list() -> Result<LibraryCatalog, AnyError> {
         .map_err(|e| AnyError::from(e).context("Error parsing article list JSON"))
 }
 
-// This pattern was taken from
-// https://github.com/AnthumChris/fetch-progress-indicators/blob/efaaaf073bc6927a803e5963a92ba9b11a585cc0/fetch-basic/supported-browser.js
-async fn read_inc(
-    num_bytes_expected: usize,
-    reader: ReadableStreamDefaultReader,
-    controller: ReadableStreamDefaultController,
-) {
-    let mut num_bytes_read = 0;
-
-    let mut acc = String::new();
-
-    loop {
-        let chunk_promise = reader.read();
-        let chunk = match JsFuture::from(chunk_promise).await {
-            Ok(c) => c,
-            Err(e) => {
-                ReadableStreamDefaultController::error_with_e(&controller, &e);
-                return;
-            }
-        };
-
-        let done =
-            js_sys::Reflect::get(&chunk, &JsValue::from_str("done")).unwrap() == JsValue::TRUE;
-
-        if done {
-            let _ = ReadableStreamDefaultController::close(&controller);
-            return;
-        } else {
-            // Get the chunk and append it to the queue
-            let val = js_sys::Reflect::get(&chunk, &JsValue::from_str("value")).unwrap();
-            controller.enqueue_with_chunk(&val);
-
-            // Update the number of bytes read
-            let chunk_size = val.unchecked_into::<ArrayBuffer>().byte_length();
-            num_bytes_read += chunk_size;
-
-            let progress = 100.0 * num_bytes_read as f64 / num_bytes_expected as f64;
-            tracing::error!("Fetched {progress}%");
-
-            //let typed_buff: Uint8Array = Uint8Array::new(&val);
-            //let slice_begin = audio_blob.len();
-            //audio_blob.extend(core::iter::repeat(0u8).take(typed_buff.length() as usize));
-            //typed_buff.copy_to(&mut audio_blob[slice_begin..]);
-
-            //library_link.send_message(LibraryMsg::SetDownloadProgress {
-            //    id: ArticleId(id.to_string()),
-            //    progress: audio_blob.len() as f64 / blob_size as f64,
-            //});
-        }
-    }
-}
-
 /// Fetches a specific article
-async fn fetch_article(id: &str, title: &str) -> Result<CachedArticle, AnyError> {
+async fn fetch_article(
+    id: &ArticleId,
+    title: &str,
+    lib_link: Scope<Library>,
+) -> Result<CachedArticle, AnyError> {
     // Fetch the audio blobs
-    let filename = format!("{id}.mp3");
+    let filename = format!("{}.mp3", id.0);
     let encoded_title = urlencoding::encode(&filename);
     let resp = Request::get(&format!("/api/audio-blobs/{encoded_title}"))
         .send()
         .await
         .map_err(|e| {
-            let ctx = format!("Error fetching article {id}");
+            let ctx = format!("Error fetching article {:?}", id);
             AnyError::from(e).context(ctx)
         })?;
     if !resp.ok() {
@@ -122,6 +63,8 @@ async fn fetch_article(id: &str, title: &str) -> Result<CachedArticle, AnyError>
         );
     }
 
+    // Get the size of the audio blob. This is the denominator when we compute percentage
+    // downloaded.
     let blob_size = resp
         .headers()
         .get("content-length")
@@ -129,60 +72,22 @@ async fn fetch_article(id: &str, title: &str) -> Result<CachedArticle, AnyError>
         .parse::<usize>()
         .unwrap();
 
-    let reader = resp
-        .body()
-        .ok_or(AnyError::msg("could not get repsonse body"))?
-        .get_reader()
-        .dyn_into::<JsValue>()
-        .unwrap();
-    tracing::error!("reader is {:?}", reader);
-    tracing::error!("reader type is {:?}", reader.js_typeof().as_string());
-    let keys = js_sys::Reflect::own_keys(&reader).unwrap();
-    for i in 0..keys.length() {
-        let k = keys.get(i as u32);
-        tracing::error!("reader has a key '{}'", k.as_string().unwrap());
-    }
+    // Convert the response into one that will fire a given callback every time it gets a chunk. We
+    // use this callback to inform the library of the download status.
+    let mut num_bytes_read = 0;
+    let id_copy = id.clone();
+    let resp = crate::utils::response_with_read_callback(resp, move |chunk| {
+        // Update the number of bytes read
+        num_bytes_read += chunk.byte_length() as usize;
 
-    let reader: ReadableStreamDefaultReader = reader.unchecked_into();
-    /*
-    let reader: ReadableStreamDefaultReader = reader
-        .dyn_into()
-        .map_err(|e| tracing::error!("Not a ReadableStreamDefault reader. {:?}", e))
-        .unwrap();
-    */
+        // Tell the library how much progress we've made
+        lib_link.send_message(LibraryMsg::SetDownloadProgress {
+            id: id_copy.clone(),
+            progress: num_bytes_read as f64 / blob_size as f64,
+        });
+    })?;
 
-    // let pageshow_cb = Closure::new(move |evt| pageshow_callback(evt, link.clone()));
-    let start_cb = Closure::once(move |controller: ReadableStreamDefaultController| {
-        spawn_local(async move {
-            read_inc(blob_size, reader, controller).await;
-        })
-    });
-
-    let readable_stream_callbacks = js_sys::Object::default();
-    js_sys::Reflect::set(
-        readable_stream_callbacks.as_ref(),
-        &JsValue::from_str("start"),
-        start_cb.as_ref(),
-    );
-
-    let readable_stream =
-        ReadableStream::new_with_underlying_source(&readable_stream_callbacks).unwrap();
-    let resp = {
-        let raw = web_sys::Response::new_with_opt_readable_stream(Some(&readable_stream)).unwrap();
-        gloo_net::http::Response::from_raw(raw)
-    };
-
-    if !resp.ok() {
-        bail!(
-            "Error fetching article {} ({})",
-            resp.status(),
-            resp.status_text()
-        );
-    }
-
-    tracing::info!("Got audio blob {:?}", resp);
-
-    // Parse the binary
+    // Download the whole response
     let audio_blob = resp
         .binary()
         .await
@@ -191,7 +96,7 @@ async fn fetch_article(id: &str, title: &str) -> Result<CachedArticle, AnyError>
     // Return the article
     Ok(CachedArticle {
         title: title.to_string(),
-        id: ArticleId(id.to_string()),
+        id: id.clone(),
         audio_blob,
     })
 }
@@ -211,8 +116,9 @@ fn render_lib_item(
     download_progress: Option<DownloadProgress>,
 ) -> Html {
     let title = metadata.title.clone();
-    let id = metadata.id.clone();
+    let id = ArticleId(metadata.id.clone());
     let title_copy = title.clone();
+
     let callback = library_link.callback(move |_| LibraryMsg::FetchArticle {
         id: id.clone(),
         title: title_copy.clone(),
@@ -248,9 +154,9 @@ fn render_lib_item(
     let elem_id = format!("lib-{}", metadata.id);
     let add_to_queue_button = if let Some(progress) = download_progress {
         match progress {
-            DownloadProgress::InProgress => {
+            DownloadProgress::InProgress(pct) => {
                 html! {
-                    <p id={elem_id} class="downloadProgress">{ "..." }</p>
+                    <p id={elem_id} class="downloadProgress">{ format!("{:0.02}", pct) }</p>
                 }
             }
             DownloadProgress::Done => {
@@ -288,7 +194,7 @@ fn render_lib_item(
 /// Denotes whether a library item is downloading or done downloading
 #[derive(Copy, Clone, Debug)]
 enum DownloadProgress {
-    InProgress,
+    InProgress(f64),
     Done,
 }
 
@@ -303,8 +209,9 @@ pub(crate) struct Library {
 pub(crate) enum LibraryMsg {
     SetCatalog(LibraryCatalog),
     SetError(AnyError),
-    FetchArticle { id: String, title: String },
+    FetchArticle { id: ArticleId, title: String },
     FetchLibrary,
+    SetDownloadProgress { id: ArticleId, progress: f64 },
     PassArticleToQueue(QueueEntry),
     MarkAsQueued(Vec<ArticleId>),
     MarkAsUnqueued(ArticleId),
@@ -321,6 +228,8 @@ impl Component for Library {
     type Properties = Props;
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        let lib_link = ctx.link().clone();
+
         match msg {
             LibraryMsg::SetCatalog(catalog) => {
                 self.err = None;
@@ -339,15 +248,11 @@ impl Component for Library {
                 });
             }
             LibraryMsg::FetchArticle { id, title } => {
-                // Mark the fetch as in-progress
-                self.download_progresses
-                    .insert(ArticleId(id.clone()), DownloadProgress::InProgress);
-
                 // Fetch an article, save it, and relay the article handle. If there's an error,
                 // post it
                 ctx.link()
                     .callback_future_once(|()| async move {
-                        let article = match fetch_article(&id, &title).await {
+                        let article = match fetch_article(&id, &title, lib_link).await {
                             Ok(a) => a,
                             Err(e) => return LibraryMsg::SetError(e),
                         };
@@ -360,6 +265,11 @@ impl Component for Library {
                         LibraryMsg::PassArticleToQueue(queue_entry)
                     })
                     .emit(());
+            }
+            LibraryMsg::SetDownloadProgress { id, progress } => {
+                // Update the article's download progress
+                self.download_progresses
+                    .insert(id.clone(), DownloadProgress::InProgress(progress));
             }
             LibraryMsg::PassArticleToQueue(queue_entry) => {
                 // Mark the article as downloaded

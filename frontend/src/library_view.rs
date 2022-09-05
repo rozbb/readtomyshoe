@@ -148,27 +148,31 @@ fn render_lib_item(
     let add_to_queue_button = if let Some(progress) = download_progress {
         match progress {
             DownloadProgress::InProgress(fraction) => {
-                let pct = format!("{}%", (100.0 * fraction).floor() as usize);
+                let pct_val = format!("{}", (100.0 * fraction).floor() as usize);
+                let pct_str = format!("{}%", pct_val);
+                let title_text = format!("Downloading {title}");
                 html! {
                     <button
                         class="percentage"
                         id={elem_id}
-                        aria-label={ pct.clone() }
-                        title={ pct.clone() }
+                        role="progressbar"
+                        aria-valuenow={ pct_val }
+                        aria-label={ title_text.clone() }
+                        title={ title_text }
                         disabled=true
                     >
-                        { pct }
+                        { pct_str }
                     </button>
                 }
             }
             DownloadProgress::Done => {
-                let add_title_text = format!("Downloaded {title}");
+                let title_text = format!("Downloaded {title}");
                 html! {
                     <button
                         class="downloadDone"
                         id={elem_id}
-                        aria-label={ add_title_text.clone() }
-                        title={ add_title_text }
+                        aria-label={ title_text.clone() }
+                        title={ title_text }
                         disabled=true
                     >
                         { "✔︎" }
@@ -192,7 +196,7 @@ fn render_lib_item(
 
     html! {
         <tr role="listitem" aria-label={ title.clone() }>
-            <td class="addToQueue">{add_to_queue_button}</td>
+            <td class="addToQueue" aria-live="assertive">{add_to_queue_button}</td>
             <td class = "articleDetails">
                 <p class="libArticleTitle">{ title }</p>
                 <span class="articleMetadata">{ date_added_str }</span>

@@ -1,8 +1,7 @@
 //! Implements a barebones client to the Google Cloud TTS service
 
-use anyhow::{anyhow, bail, Error};
+use anyhow::{anyhow, bail, Context, Error as AnyError};
 use bytes::Bytes;
-use futures::Future;
 use serde::Deserialize;
 
 use core::iter;
@@ -55,7 +54,7 @@ impl TtsRequest {
     }
 }
 
-pub(crate) fn get_api_key() -> Result<String, Error> {
+pub(crate) fn get_api_key() -> Result<String, AnyError> {
     std::fs::read_to_string(API_KEY_FILE).map_err(|e| {
         anyhow!(
             "Could not open API key file {API_KEY_FILE}. \
@@ -67,25 +66,28 @@ pub(crate) fn get_api_key() -> Result<String, Error> {
 
 /// Speaks text string of length at most MAX_CHARS_PER_REQUEST. Returns an error if length exceeds,
 /// or an error occurs in the Google Cloud API call.
-pub(crate) async fn tts_single(api_key: &str, req: &TtsRequest) -> Result<Bytes, Error> {
+pub(crate) async fn tts_single(api_key: &str, req: &TtsRequest) -> Result<Bytes, AnyError> {
     let payload = req.into_json();
 
+    // The Google API has a hard upper limit on characters per request. The text breaking before
+    // this point should ensure this limit is never exceeded
     if req.text.len() > MAX_CHARS_PER_REQUEST {
         bail!("TTS request is too long");
     }
 
+    // Do the HTTP request
     let client = reqwest::Client::new();
     let url = reqwest::Url::parse_with_params(GCP_TTS_API, &[("key", api_key)])?;
-
     let res = client
         .post(url)
         .json(&payload)
         .send()
         .await
-        .map_err(|e| Error::from(e).context("network failed"))?
+        .with_context(|| "Couldn't make TTS request")?
         .error_for_status()
-        .map_err(|e| Error::from(e).context("TTS API req failed"))?;
+        .with_context(|| "TTS request failed")?;
 
+    // The resulting JSON response has our MP3 data
     let res_bytes = res.bytes().await?;
     let audio_response: AudioResponse = serde_json::from_slice(&res_bytes)?;
     let audio_blob = Bytes::from(base64::decode(audio_response.audio_content)?);
@@ -93,26 +95,11 @@ pub(crate) async fn tts_single(api_key: &str, req: &TtsRequest) -> Result<Bytes,
     Ok(audio_blob)
 }
 
-// Helper function. Computes the given futures in parallel, and collects its results. Code from
-// https://stackoverflow.com/a/63437482
-async fn join_parallel<T: Send + 'static>(
-    futs: impl IntoIterator<Item = impl Future<Output = T> + Send + 'static>,
-) -> Vec<T> {
-    let tasks: Vec<_> = futs.into_iter().map(tokio::spawn).collect();
-    // unwrap the Result because it is introduced by tokio::spawn()
-    // and isn't something our caller can handle
-    futures::future::join_all(tasks)
-        .await
-        .into_iter()
-        .map(Result::unwrap)
-        .collect()
-}
-
 /// Speaks text string. Returns an error if an error occurs in the Google Cloud API call.
 pub(crate) async fn tts(
     api_key: &str,
     TtsRequest { text, use_wavenet }: TtsRequest,
-) -> Result<Bytes, Error> {
+) -> Result<Bytes, AnyError> {
     let api_key_iter = core::iter::repeat(api_key);
 
     // Break up the TTS tasks into smaller ones of at most MAX_CHARS_PER_REQUEST
@@ -131,10 +118,13 @@ pub(crate) async fn tts(
             }
         });
 
-    // Do the tasks in parallel and concat the resulting MP3 files. Fun fact: the concatenation of
-    // MP3 files is itself a valid MP3 file.
-    let mp3_blobs: Result<Vec<Bytes>, Error> = join_parallel(tts_tasks).await.into_iter().collect();
-    let final_mp3 = mp3_blobs?.concat().into();
+    // Do the tasks in parallel. If one task fails, try_join_all will cancel the rest of them
+    // immediately. This prevents us from wasting API calls.
+    let mp3_blobs = futures::future::try_join_all(tts_tasks).await?;
+    // Concat the resulting MP3 blobs. Fun fact: the concatenation of MP3 files is itself a valid
+    // MP3 file.
+    let final_mp3: Bytes = mp3_blobs.concat().into();
+
     Ok(final_mp3)
 }
 
@@ -208,7 +198,7 @@ fn break_greedily_at_delims<'a>(
     text: &'a str,
     max_chunk_size: usize,
     delims: &[char],
-) -> Result<Vec<&'a str>, Error> {
+) -> Result<Vec<&'a str>, AnyError> {
     // Break the text into the f irst delim first
     let mut chunks = break_greedily_at_delim(text, delims[0], max_chunk_size);
 
@@ -239,7 +229,7 @@ fn break_greedily_at_delims<'a>(
 
 /// Breaks English text into bounded-size chunks by newlines, then (if necessary) colons,
 /// then periods, then commas.
-fn break_english_text(text: &str, max_chunk_size: usize) -> Result<Vec<&str>, Error> {
+fn break_english_text(text: &str, max_chunk_size: usize) -> Result<Vec<&str>, AnyError> {
     break_greedily_at_delims(text, max_chunk_size, &['\n', ':', '.', ','])
 }
 

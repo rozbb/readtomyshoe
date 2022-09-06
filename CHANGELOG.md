@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Additions
 - Introduced `CHANGELOG.md`
 - Added progress bar indicator to Add to Queue buttons.
+- Implemented TTS rate limiting on the backend. CLI flag is `--max-chars-per-min`.
 
 ### Fixes
 - Made backend use (and clean up) temp files in article extraction. Fixes bug where a failed extraction makes retry impossible due to "File already exists" error.

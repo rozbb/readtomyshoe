@@ -43,10 +43,10 @@ async fn submit_article_url(submission: &ArticleUrlSubmission) -> Result<(), Any
 
     if !resp.ok() {
         bail!(
-            "Error adding article \"{}\" ({}; {:?})",
+            "Error adding article \"{}\". {}. {}",
             submission.url,
             resp.status_text(),
-            resp.text().await
+            resp.text().await.unwrap_or("".to_string())
         );
     }
 

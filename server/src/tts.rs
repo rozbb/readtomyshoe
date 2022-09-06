@@ -14,7 +14,6 @@ const GCP_TTS_API: &str = "https://texttospeech.googleapis.com/v1beta1/text:synt
 
 // See https://cloud.google.com/text-to-speech/quotas
 const MAX_CHARS_PER_REQUEST: usize = 5000;
-const MAX_REQUESTS_PER_MINUTE: usize = 1000;
 
 #[derive(Deserialize)]
 struct AudioResponse<'a> {
@@ -220,7 +219,7 @@ fn break_greedily_at_delims<'a>(
     // Now check that everything was broken into sufficiently small pieces
     for chunk in &chunks {
         if chunk.len() > max_chunk_size {
-            bail!("Couldn't break chunk {:?}", chunk);
+            bail!("Couldn't break text chunk {:?}", chunk);
         }
     }
 

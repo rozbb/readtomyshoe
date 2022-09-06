@@ -24,6 +24,15 @@ pub struct ArticleTextSubmission {
     pub body: String,
 }
 
+impl ArticleTextSubmission {
+    /// Converts this submission into its serialized string form
+    pub fn serialize(&self) -> String {
+        // TODO: Internationalize this to use the correct stop character for the given language
+        // Include the title at the top of the article.
+        format!("{}. {}", self.title, self.body)
+    }
+}
+
 /// The request type for when the client sends just the article's URL
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ArticleUrlSubmission {

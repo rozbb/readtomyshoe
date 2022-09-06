@@ -6,6 +6,7 @@ mod util;
 use std::{
     future::ready,
     net::{IpAddr, Ipv6Addr, SocketAddr},
+    num::NonZeroU32,
     path::PathBuf,
     str::FromStr,
 };
@@ -53,10 +54,11 @@ struct Opt {
     #[clap(long = "audio-blob-dir", default_value = "audio_blobs")]
     audio_blob_dir: String,
 
-    /// The limit on article size (as a UTF-8 string), in bytes. 0 means no limit. Use 0 with
+    /// The limit on the number of article characters (bytes, really) the server will process per
+    /// minute. The default is 5M because that's Google Cloud's limit. Use large values with
     /// caution: a malicious user can rack up your Google Cloud costs.
-    #[clap(long = "max-article-len", default_value = "0")]
-    max_article_len: usize,
+    #[clap(long = "max-chars-per-min", default_value = "5000000")]
+    max_chars_per_min: NonZeroU32,
 }
 
 #[tokio::main]
@@ -94,7 +96,7 @@ async fn main() {
 
     // Set up /api/
     let app = list_articles::setup(app, &opt.audio_blob_dir);
-    let app = add_article::setup(app, opt.max_article_len, &opt.audio_blob_dir);
+    let app = add_article::setup(app, opt.max_chars_per_min, &opt.audio_blob_dir);
 
     // Make a /healthz endpoint for Docker health checks
     let app = app.route("/healthz", get(|| async { "ok" }));

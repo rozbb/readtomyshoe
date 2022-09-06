@@ -7,14 +7,28 @@ use common::{ArticleMetadata, ArticleTextSubmission, ArticleUrlSubmission};
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
+    num::{NonZeroU32, NonZeroUsize},
     path::Path,
+    sync::Arc,
     time::SystemTime,
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use async_process::Command;
 use axum::{extract::Extension, routing::post, Json, Router};
+use governor::{
+    clock::DefaultClock, middleware::NoOpMiddleware, state::direct::NotKeyed, state::InMemoryState,
+    Quota, RateLimiter as BaseRateLimiter,
+};
 use serde::Deserialize;
+
+type DefaultRateLimiter = BaseRateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>;
+
+#[derive(Clone)]
+struct RateLimiter {
+    base_rl: Arc<DefaultRateLimiter>,
+    quota: Quota,
+}
 
 /// A portion of trafilatura's extracted text. The rest of the fields are: title, author, hostname,
 /// date, categories, tags, fingerprint, id, license, comments, raw_text, source, source_hostname,
@@ -44,24 +58,34 @@ impl axum::response::IntoResponse for AddArticleError {
 }
 
 // Sets the /api/add-article route
-pub(crate) fn setup(router: Router, max_article_len: usize, audio_blob_dir: &str) -> Router {
+pub(crate) fn setup(router: Router, max_chars_per_min: NonZeroU32, audio_blob_dir: &str) -> Router {
+    // Set up the rate limiter
+    let quota = Quota::per_minute(max_chars_per_min);
+    let rate_limiter = RateLimiter {
+        base_rl: Arc::new(DefaultRateLimiter::direct(quota.clone())),
+        quota,
+    };
+
+    // Set up the routes
     router.nest(
         "/api",
         Router::new()
             .route("/add-article-by-text", post(add_article_by_text_endpoint))
             .route("/add-article-by-url", post(add_article_by_url_endpoint))
-            .layer(Extension((max_article_len, audio_blob_dir.to_string()))),
+            .layer(Extension(rate_limiter))
+            .layer(Extension(audio_blob_dir.to_string())),
     )
 }
 
 /// Converts the given article contents to speech, and returns the new filename
 async fn add_article_by_text_endpoint(
     Json(article): Json<ArticleTextSubmission>,
-    Extension((max_article_len, audio_blob_dir)): Extension<(usize, String)>,
+    Extension(rate_limiter): Extension<RateLimiter>,
+    Extension(audio_blob_dir): Extension<String>,
 ) -> Result<String, AddArticleError> {
     // Just call down to add_article_by_text
     tracing::debug!("Adding article by text: '{}'", article.title);
-    let meta = match add_article_by_text(&article, max_article_len, &audio_blob_dir).await {
+    let meta = match add_article_by_text(&article, rate_limiter, &audio_blob_dir).await {
         Ok(m) => m,
         Err(e) => {
             tracing::error!("Error adding by text: {:?}", e);
@@ -79,10 +103,11 @@ async fn add_article_by_text_endpoint(
 /// Fetches the article at the given URL, converts it to speech, and returns the new filename
 async fn add_article_by_url_endpoint(
     Json(ArticleUrlSubmission { url }): Json<ArticleUrlSubmission>,
-    Extension((max_article_len, audio_blob_dir)): Extension<(usize, String)>,
+    Extension(rate_limiter): Extension<RateLimiter>,
+    Extension(audio_blob_dir): Extension<String>,
 ) -> Result<String, AddArticleError> {
     tracing::debug!("Adding article by URL: {url}");
-    let meta = match add_article_by_url(&url, max_article_len, &audio_blob_dir).await {
+    let meta = match add_article_by_url(&url, rate_limiter, &audio_blob_dir).await {
         Ok(m) => m,
         Err(e) => {
             tracing::error!("Error adding by url: {:?}", e);
@@ -100,15 +125,24 @@ async fn add_article_by_url_endpoint(
 /// The real logic. Converts the given article contents to speech, and returns the new filename
 async fn add_article_by_text(
     article: &ArticleTextSubmission,
-    max_article_len: usize,
+    rate_limiter: RateLimiter,
     audio_blob_dir: &str,
 ) -> Result<ArticleMetadata, AddArticleError> {
     tracing::debug!("Processing article with title '{}'", article.title);
 
-    if article.body.len() > max_article_len {
+    // Serialize the article and get its bytelen
+    let text = article.serialize();
+    let text_len: NonZeroU32 = {
+        let n = text.len();
+        let nzn = NonZeroUsize::new(n).or(NonZeroUsize::new(1)).unwrap();
+        NonZeroU32::try_from(nzn).with_context(|| "Article is is far too large")?
+    };
+
+    // If the article bytelen exceeds the limit, error out
+    if rate_limiter.base_rl.check_n(text_len).is_err() {
         Err(anyhow!(
-            "Article too long. This server only permits articles of up to {} characters.",
-            max_article_len
+            "Usage limit exceeded. This server processes at most {} letters per minute.",
+            rate_limiter.quota.burst_size().get(),
         ))?;
     }
 
@@ -133,17 +167,15 @@ async fn add_article_by_text(
         .map_err(|e| anyhow!("Couldn't open tmp savefile '{:?}': {:?}", tmp_savepath, e))?;
 
     // Try to do a TTS and save to the savefile. On error, make sure to clean up the empty file
-    tts_to_file(&mut tmp_savefile, &article)
-        .await
-        .map_err(|e| {
-            // Remove the file
-            if let Err(f) = fs::remove_file(&tmp_savepath) {
-                let context = format!("could not delete {id}: {f}");
-                e.0.context(context).into()
-            } else {
-                e
-            }
-        })?;
+    tts_to_file(&mut tmp_savefile, text).await.map_err(|e| {
+        // Remove the file
+        if let Err(f) = fs::remove_file(&tmp_savepath) {
+            let context = format!("could not delete {id}: {f}");
+            e.0.context(context).into()
+        } else {
+            e
+        }
+    })?;
 
     // TTS was successful, change the filename
     std::fs::rename(&tmp_savepath, &savepath)
@@ -168,7 +200,7 @@ async fn add_article_by_text(
 /// new filename
 async fn add_article_by_url(
     url: &str,
-    max_article_len: usize,
+    rate_limiter: RateLimiter,
     audio_blob_dir: &str,
 ) -> Result<ArticleMetadata, AddArticleError> {
     // TODO: Check earlier that trafilatura is present
@@ -196,7 +228,7 @@ async fn add_article_by_url(
     };
 
     // Now that we have the article body, call down to add_article_by_text
-    let mut meta = add_article_by_text(&text_submission, max_article_len, audio_blob_dir).await?;
+    let mut meta = add_article_by_text(&text_submission, rate_limiter, audio_blob_dir).await?;
     // Add the URL to the metadata
     meta.source_url = Some(url.to_string());
 
@@ -204,21 +236,14 @@ async fn add_article_by_url(
 }
 
 /// Converts an article to speech and saves to the given file
-async fn tts_to_file(
-    file: &mut File,
-    ArticleTextSubmission { title, body }: &ArticleTextSubmission,
-) -> Result<(), AddArticleError> {
+async fn tts_to_file(file: &mut File, text: String) -> Result<(), AddArticleError> {
     let api_key = get_api_key().map_err(|e| anyhow!("Failed to get Google API key: {:?}", e))?;
 
-    // TODO: Internationalize this to use the correct stop character for the given language
-    // Include the title at the top of the article.
-    let text = format!("{title}. {body}");
+    // Make the TTS request
     let req = TtsRequest {
         text,
         use_wavenet: true,
     };
-
-    // Make the TTS request
     let bytes = tts(&api_key, req)
         .await
         .map_err(|e| anyhow!("TTS failed: {:?}", e))?;

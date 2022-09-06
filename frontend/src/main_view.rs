@@ -67,7 +67,7 @@ impl Component for Main {
             return html! {
                 <>
                     { header() }
-                    <h3 aria-role="alert" aria-live="assertive" style="color: red">{
+                    <h3 role="alert" style="color: red">{
                         "Error: cannot access local storage.
                         ReadToMyShoe does not work in private browsing mode in Firefox."
                     }</h3>

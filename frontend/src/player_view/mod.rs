@@ -30,7 +30,7 @@ async fn prepare_for_play(id: &ArticleId, audio_link: &Scope<Audio>) -> f64 {
     let elapsed = match caching::load_article_state(&id).await {
         Ok(state) => state.elapsed,
         Err(e) => {
-            tracing::debug!("Article state did not load {}: {:?}", id.0, e);
+            tracing::debug!("Article state did not load {}: {}", id.0, e);
             0.0
         }
     };
@@ -46,7 +46,7 @@ async fn prepare_for_play(id: &ArticleId, audio_link: &Scope<Audio>) -> f64 {
             });
         }
         Err(e) => {
-            tracing::error!("Couldn't load article {}: {:?}", id.0, e);
+            tracing::error!("Couldn't load article {}: {}", id.0, e);
         }
     }
 
@@ -203,7 +203,7 @@ impl Component for Player {
                     tracing::trace!("successfully restored player from save");
                     link.send_message(PlayerMsg::SetState(state));
                 }
-                Err(e) => tracing::error!("Could not load player state: {:?}", e),
+                Err(e) => tracing::error!("Could not load player state: {}", e),
             }
         });
 
@@ -361,7 +361,7 @@ impl Component for Player {
                     // Save the player state first
                     match caching::save_player_state(&player_state).await {
                         Ok(_) => tracing::trace!("Successfully saved player state"),
-                        Err(e) => tracing::error!("Could not save player state: {:?}", e),
+                        Err(e) => tracing::error!("Could not save player state: {}", e),
                     }
 
                     // Try to save the article state. There may well be nothing playing. In which
@@ -369,7 +369,7 @@ impl Component for Player {
                     if let Some(s) = article_state {
                         match caching::save_article_state(&s).await {
                             Ok(_) => tracing::trace!("Successfully saved article state"),
-                            Err(e) => tracing::error!("Could not save article state: {:?}", e),
+                            Err(e) => tracing::error!("Could not save article state: {}", e),
                         }
                     } else {
                         tracing::trace!("No article to save");
@@ -404,19 +404,6 @@ impl Component for Player {
                 .as_ref()
                 .unwrap()
                 .send_message(AudioMsg::JumpBackward)
-        });
-
-        let self_link = player_link.clone();
-        let now_playing = self.state.now_playing.clone();
-        let playpause_cb = Callback::from(move |_: MouseEvent| {
-            if GlobalAudio::is_playing() {
-                GlobalAudio::pause();
-            } else {
-                tracing::error!("Now playing = {:?}", &now_playing);
-                if let Some(entry) = now_playing.clone() {
-                    self_link.send_message(PlayerMsg::Play(entry))
-                }
-            }
         });
 
         // Callback for the "go to beginning". When prevtrack is clicked, go to the beginning of

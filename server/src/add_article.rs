@@ -174,15 +174,12 @@ async fn add_article_by_url(
         .map_err(|e| anyhow!("IO error running trafulatura: {:?}", e))?;
     // See if the command failed
     if !output.status.success() {
-        Err(anyhow!(
-            "Error running trafilatura: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ))?;
+        Err(anyhow!("Text extraction failed"))?;
     }
 
     // Convert the CLI output from JSON and turn it into a `ArticleTextSubmission`
-    let parsed_res: ExtractedArticle = serde_json::from_slice(&output.stdout)
-        .map_err(|e| anyhow!("Error parsing trafilatura JSON: {:?}", e))?;
+    let parsed_res: ExtractedArticle =
+        serde_json::from_slice(&output.stdout).map_err(|_| anyhow!("Text extraction failed"))?;
     let text_submission = ArticleTextSubmission {
         title: parsed_res.title,
         body: parsed_res.text,

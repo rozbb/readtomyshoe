@@ -80,7 +80,7 @@ impl Queue {
         spawn_local(async move {
             let _ = caching::save_queue(&self_copy)
                 .await
-                .map_err(|e| tracing::error!("Couldn't restore queue: {:?}", e));
+                .map_err(|e| tracing::error!("Couldn't restore queue: {}", e));
         });
     }
 
@@ -88,7 +88,7 @@ impl Queue {
     async fn load() -> Option<Queue> {
         caching::load_queue()
             .await
-            .map_err(|e| tracing::error!("Couldn't restore queue: {:?}", e))
+            .map_err(|e| tracing::error!("Couldn't restore queue: {}", e))
             .ok()
     }
 }
@@ -119,12 +119,12 @@ impl Component for Queue {
                 spawn_local(async move {
                     // Delete the article itself
                     let _ = caching::delete_article(&entry.id).await.map_err(|e| {
-                        tracing::error!("Couldn't delete article {}: {:?}", &entry.id.0, e)
+                        tracing::error!("Couldn't delete article {}: {}", &entry.id.0, e)
                     });
 
                     // Delete the reader's position in the article
                     let _ = caching::delete_article_state(&entry.id).await.map_err(|e| {
-                        tracing::error!("Couldn't delete state of article {}: {:?}", &entry.id.0, e)
+                        tracing::error!("Couldn't delete state of article {}: {}", &entry.id.0, e)
                     });
                 });
             }

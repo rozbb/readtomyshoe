@@ -17,7 +17,7 @@ async fn submit_article_text(submission: &ArticleTextSubmission) -> Result<(), A
         .json(&submission)?
         .send()
         .await
-        .map_err(|e| anyhow!("Error POSTing to {endpoint}: {:?}", e))?;
+        .map_err(|e| anyhow!("Error POSTing to {endpoint}: {}", e))?;
 
     if !resp.ok() {
         bail!(
@@ -39,7 +39,7 @@ async fn submit_article_url(submission: &ArticleUrlSubmission) -> Result<(), Any
         .json(&submission)?
         .send()
         .await
-        .map_err(|e| anyhow!("Error POSTing to {endpoint}: {:?}", e))?;
+        .map_err(|e| anyhow!("Error POSTing to {endpoint}: {}", e))?;
 
     if !resp.ok() {
         bail!(
@@ -166,7 +166,7 @@ impl Component for Add {
         let err_str = self
             .err
             .as_ref()
-            .map(|e| format!("{:?}", e))
+            .map(|e| format!("{}", e))
             .unwrap_or("".to_string());
 
         html! {
@@ -203,7 +203,7 @@ impl Component for Add {
                         { self.progress.join(" ") }
                     </p>
                 </section>
-                <section aria-live="assertive" aria-role="alert" id="errors" title="errors">
+                <section role="alert" id="errors" title="errors">
                     <p style={ "color: red;" }>
                         { err_str }
                     </p>

@@ -196,7 +196,7 @@ fn render_lib_item(
 
     html! {
         <tr role="listitem" aria-label={ title.clone() }>
-            <td class="addToQueue" aria-live="assertive">{add_to_queue_button}</td>
+            <td class="addToQueue">{add_to_queue_button}</td>
             <td class = "articleDetails">
                 <p class="libArticleTitle">{ title }</p>
                 <span class="articleMetadata">{ date_added_str }</span>
@@ -365,8 +365,8 @@ impl Component for Library {
         // If there's an error, render it
         if let Some(err) = &self.err {
             html! {
-                <p style={ "color: red;" } aria-live="assertive" aria-role="alert" title="errors">
-                    { format!("{:?}", err) }
+                <p style={ "color: red;" } role="alert" title="errors">
+                    { format!("{}", err) }
                 </p>
             }
         } else if let Some(catalog) = &self.catalog {
@@ -398,12 +398,12 @@ impl Component for Library {
                     <table role="list" aria-label="Library catalog">
                         { rendered_list }
                     </table>
-                <p
-                    id="libErrors"
-                    style={ "color: red;" }
-                    aria-live="assertive"
-                    aria-role="alert" title="errors">
-                </p>
+                    <p
+                        id="libErrors"
+                        role="alert"
+                        style={ "color: red;" }
+                        title="errors">
+                    </p>
                 </section>
             }
         } else {

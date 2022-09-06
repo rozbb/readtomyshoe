@@ -1,4 +1,4 @@
-use common::{ArticleTextSubmission, ArticleUrlSubmission};
+use common::{ArticleTextSubmission, ArticleUrlSubmission, MAX_TITLE_UTF16_CODEUNITS};
 
 use anyhow::{anyhow, bail, Error as AnyError};
 use gloo_net::http::Request;
@@ -188,7 +188,12 @@ impl Component for Add {
                     <legend><h2>{ "Add article by text" }</h2></legend>
                     <div class="field">
                         <label for={TITLE_FORM_ID}>{ "Article title:" }</label>
-                        <input type="text" id={TITLE_FORM_ID} required=true />
+                        <input
+                            type="text"
+                            id={TITLE_FORM_ID}
+                            maxlength={MAX_TITLE_UTF16_CODEUNITS.to_string()}
+                            required=true
+                        />
                     </div>
                     <div class="field">
                         <label for={BODY_FORM_ID}>{ "Article body:" }</label>

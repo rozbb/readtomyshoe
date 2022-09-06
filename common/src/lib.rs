@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+/// The maximum allowed length of a title, in UTF-16 code units
+pub const MAX_TITLE_UTF16_CODEUNITS: usize = 300;
+
 /// Contains all the metadata about an article
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ArticleMetadata {

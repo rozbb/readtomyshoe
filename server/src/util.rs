@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::{bail, Error as AnyError};
 use blake2::{Blake2s256, Digest};
+use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
 use id3::{Tag, TagLike, Version};
 
@@ -19,43 +20,51 @@ const FILENAME_TITLE_MAXLEN: usize = 20;
 /// BEFORE it is encoded in zbase32.
 const ARTICLE_HASH_BITLEN: u64 = 128;
 
-/// Truncates a string to occupy at most `n` bytes
-fn truncate_to_bytes(s: &str, n: usize) -> &str {
+/// Used in `truncate_to_bytes` to specify the byte encoding of the string to be truncated
+pub(crate) enum StrEncoding {
+    Utf8,
+    Utf16,
+}
+
+/// Truncates a string to occupy at most `max_len` bytes, under the given encoding
+///
+/// Panics: if `max_len < 4`
+pub(crate) fn truncate_to_bytes(string: &str, max_len: usize, encoding: StrEncoding) -> String {
     // A codepoint in UTF-8 is at most 4 bytes. So the smallest we can guarantee truncation to is 4
     // bytes.
-    if n < 4 {
+    if max_len < 4 {
         panic!("Cannot guarantee a truncation with less than 4 bytes");
     }
 
-    // Count the bytes of each character
+    // Count the bytes of each character. We'll take the longest prefix of the string whose
+    // encoding is below the length limit
     let mut byte_count = 0;
-    for c in s.chars() {
-        let char_size = c.len_utf8();
+    string
+        .chars()
+        .take_while(|c| {
+            let char_bytelen = match encoding {
+                StrEncoding::Utf8 => c.len_utf8(),
+                StrEncoding::Utf16 => 2 * c.len_utf16(),
+            };
 
-        // If this character puts us over the byte limit, return the string up to and not including
-        // this character
-        if byte_count + char_size > n {
-            return &s[..byte_count];
-        } else {
-            // If this character is within the limit, add it to the count
-            byte_count += char_size;
-        }
-    }
-
-    s
+            // Take characters until we hit the length limit
+            byte_count += char_bytelen;
+            byte_count <= max_len
+        })
+        .collect()
 }
 
 /// Computes the zbase32 encoded hash of the given article. The output length is ARTICLE_HASH_LEN.
-///
-/// Panics: if `title.len() > 255`.
 fn hash_article(ArticleTextSubmission { title, body }: &ArticleTextSubmission) -> String {
+    // We will compute H(title_len || title || body)
     let mut h = Blake2s256::default();
-    // This should never be an issue because derive_article_id truncates the title to
-    // FILENAME_TITLE_MAXLEN bytes, which is far less than 256
-    let title_len: u8 = title.len().try_into().unwrap();
+
+    // Write the title length to a buffer
+    let mut len_buf = [0u8; 8];
+    BigEndian::write_u64(&mut len_buf, title.len().try_into().unwrap());
 
     // Compute H(title_len || title || body)
-    h.update([title_len]);
+    h.update(len_buf);
     h.update(title);
     h.update(body);
 
@@ -66,7 +75,8 @@ fn hash_article(ArticleTextSubmission { title, body }: &ArticleTextSubmission) -
 
 /// Derives the unique ID of this article. It's of the form SHORTTITLE-HASH.mp3
 pub fn derive_article_id(article: &ArticleTextSubmission) -> String {
-    let truncated_title = truncate_to_bytes(&article.title, FILENAME_TITLE_MAXLEN);
+    let truncated_title =
+        truncate_to_bytes(&article.title, FILENAME_TITLE_MAXLEN, StrEncoding::Utf8);
     let hash = hash_article(&article);
     format!("{truncated_title}-{hash}.mp3")
 }
@@ -177,7 +187,7 @@ pub fn get_metadata(entry: &DirEntry) -> Result<ArticleMetadata, AnyError> {
 fn test_title_truncation() {
     let title = "Money Stuff: AMC’s APEs Might Stick Around";
     assert_eq!(
-        truncate_to_bytes(title, FILENAME_TITLE_MAXLEN),
+        truncate_to_bytes(title, FILENAME_TITLE_MAXLEN, StrEncoding::Utf8),
         "Money Stuff: AMC’s"
     );
 }

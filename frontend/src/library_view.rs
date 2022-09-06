@@ -152,31 +152,29 @@ fn render_lib_item(
                 let pct_str = format!("{}%", pct_val);
                 let title_text = format!("Downloading {title}");
                 html! {
-                    <button
+                    <p
                         class="percentage"
-                        id={elem_id}
+                        id={ elem_id }
                         role="progressbar"
                         aria-valuenow={ pct_val }
                         aria-label={ title_text.clone() }
                         title={ title_text }
-                        disabled=true
                     >
                         { pct_str }
-                    </button>
+                    </p>
                 }
             }
             DownloadProgress::Done => {
                 let title_text = format!("Downloaded {title}");
                 html! {
-                    <button
+                    <p
                         class="downloadDone"
-                        id={elem_id}
+                        id={ elem_id }
                         aria-label={ title_text.clone() }
                         title={ title_text }
-                        disabled=true
                     >
-                        { "✔︎" }
-                    </button>
+                        { "Queued" }
+                    </p>
                 }
             }
         }
@@ -184,8 +182,8 @@ fn render_lib_item(
         let add_title_text = format!("Add to queue: {}", title);
         html! {
             <button
-                id={elem_id}
-                onclick={callback}
+                id={ elem_id }
+                onclick={ callback }
                 aria-label={ add_title_text.clone() }
                 title={ add_title_text }
             >
@@ -273,6 +271,10 @@ impl Component for Library {
                 });
             }
             LibraryMsg::FetchArticle { id, title } => {
+                // We've been asked to fetch an article. Immediately set its progress to 0%
+                self.download_progresses
+                    .insert(id.clone(), DownloadProgress::InProgress(0.0));
+
                 // Fetch an article, save it, and relay the article handle. If there's an error,
                 // post it
                 ctx.link()

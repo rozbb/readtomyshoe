@@ -107,10 +107,12 @@ td {
 .addToQueue {
     padding-right: 1rem;
 }
-.addToQueue button {
+.addToQueue * {
     width: 3.5rem;
+    text-align: center;
+    margin: 0;
 }
-.percentage {
+.addToQueue p {
     font-size: 0.8rem;
 }
 .libArticleTitle {

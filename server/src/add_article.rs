@@ -44,24 +44,24 @@ impl axum::response::IntoResponse for AddArticleError {
 }
 
 // Sets the /api/add-article route
-pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
+pub(crate) fn setup(router: Router, max_article_len: usize, audio_blob_dir: &str) -> Router {
     router.nest(
         "/api",
         Router::new()
             .route("/add-article-by-text", post(add_article_by_text_endpoint))
             .route("/add-article-by-url", post(add_article_by_url_endpoint))
-            .layer(Extension(audio_blob_dir.to_string())),
+            .layer(Extension((max_article_len, audio_blob_dir.to_string()))),
     )
 }
 
 /// Converts the given article contents to speech, and returns the new filename
 async fn add_article_by_text_endpoint(
     Json(article): Json<ArticleTextSubmission>,
-    Extension(audio_blob_dir): Extension<String>,
+    Extension((max_article_len, audio_blob_dir)): Extension<(usize, String)>,
 ) -> Result<String, AddArticleError> {
     // Just call down to add_article_by_text
     tracing::debug!("Adding article by text: '{}'", article.title);
-    let meta = match add_article_by_text(&article, &audio_blob_dir).await {
+    let meta = match add_article_by_text(&article, max_article_len, &audio_blob_dir).await {
         Ok(m) => m,
         Err(e) => {
             tracing::error!("Error adding by text: {:?}", e);
@@ -79,10 +79,10 @@ async fn add_article_by_text_endpoint(
 /// Fetches the article at the given URL, converts it to speech, and returns the new filename
 async fn add_article_by_url_endpoint(
     Json(ArticleUrlSubmission { url }): Json<ArticleUrlSubmission>,
-    Extension(audio_blob_dir): Extension<String>,
+    Extension((max_article_len, audio_blob_dir)): Extension<(usize, String)>,
 ) -> Result<String, AddArticleError> {
     tracing::debug!("Adding article by URL: {url}");
-    let meta = match add_article_by_url(&url, &audio_blob_dir).await {
+    let meta = match add_article_by_url(&url, max_article_len, &audio_blob_dir).await {
         Ok(m) => m,
         Err(e) => {
             tracing::error!("Error adding by url: {:?}", e);
@@ -100,9 +100,18 @@ async fn add_article_by_url_endpoint(
 /// The real logic. Converts the given article contents to speech, and returns the new filename
 async fn add_article_by_text(
     article: &ArticleTextSubmission,
+    max_article_len: usize,
     audio_blob_dir: &str,
 ) -> Result<ArticleMetadata, AddArticleError> {
     tracing::debug!("Processing article with title '{}'", article.title);
+
+    if article.body.len() > max_article_len {
+        Err(anyhow!(
+            "Article too long. This server only permits articles of up to {} characters.",
+            max_article_len
+        ))?;
+    }
+
     let id = derive_article_id(&article);
 
     // Fail if the article already exists
@@ -159,6 +168,7 @@ async fn add_article_by_text(
 /// new filename
 async fn add_article_by_url(
     url: &str,
+    max_article_len: usize,
     audio_blob_dir: &str,
 ) -> Result<ArticleMetadata, AddArticleError> {
     // TODO: Check earlier that trafilatura is present
@@ -186,7 +196,7 @@ async fn add_article_by_url(
     };
 
     // Now that we have the article body, call down to add_article_by_text
-    let mut meta = add_article_by_text(&text_submission, audio_blob_dir).await?;
+    let mut meta = add_article_by_text(&text_submission, max_article_len, audio_blob_dir).await?;
     // Add the URL to the metadata
     meta.source_url = Some(url.to_string());
 

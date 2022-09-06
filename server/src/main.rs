@@ -52,6 +52,11 @@ struct Opt {
     /// The directory where the audio blobs are stored
     #[clap(long = "audio-blob-dir", default_value = "audio_blobs")]
     audio_blob_dir: String,
+
+    /// The limit on article size (as a UTF-8 string), in bytes. 0 means no limit. Use 0 with
+    /// caution: a malicious user can rack up your Google Cloud costs.
+    #[clap(long = "max-article-len", default_value = "0")]
+    max_article_len: usize,
 }
 
 #[tokio::main]
@@ -89,7 +94,7 @@ async fn main() {
 
     // Set up /api/
     let app = list_articles::setup(app, &opt.audio_blob_dir);
-    let app = add_article::setup(app, &opt.audio_blob_dir);
+    let app = add_article::setup(app, opt.max_article_len, &opt.audio_blob_dir);
 
     // Make a /healthz endpoint for Docker health checks
     let app = app.route("/healthz", get(|| async { "ok" }));

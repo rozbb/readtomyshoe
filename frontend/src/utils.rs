@@ -23,11 +23,11 @@ pub fn bytes_to_mp3_blob(bytes: &[u8]) -> Blob {
     .unwrap()
 }
 
-/// Runs the given closure after `secs` seconds
-pub fn run_after_delay(closure: &Closure<dyn Fn()>, secs: i32) {
+/// Runs the given closure after `millis` milliseconds
+pub fn run_after_delay(closure: &Closure<dyn Fn()>, millis: i32) {
     let win = gloo_utils::window();
     let func = closure.as_ref().unchecked_ref();
-    if let Err(e) = win.set_timeout_with_callback_and_timeout_and_arguments_0(func, secs) {
+    if let Err(e) = win.set_timeout_with_callback_and_timeout_and_arguments_0(func, millis) {
         tracing::error!("Could not set timeout with callback: {:?}", e);
     }
 }

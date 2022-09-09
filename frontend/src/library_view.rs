@@ -101,6 +101,12 @@ async fn fetch_article(
     })
 }
 
+// Defines a stable ID that refers to whatever is to the left of an article's name. That's either
+// an Add to Queue button, a download progress indicator, or a "Queued" indicator.
+fn libitem_status_elem_id(id: &ArticleId) -> String {
+    format!("status-lib-{}", urlencoding::encode(&id.0))
+}
+
 /// Renders an item in the library
 fn render_lib_item(
     metadata: ArticleMetadata,
@@ -111,9 +117,17 @@ fn render_lib_item(
     let id = ArticleId(metadata.id.clone());
     let title_copy = title.clone();
 
-    let callback = library_link.callback(move |_| LibraryMsg::FetchArticle {
-        id: id.clone(),
-        title: title_copy.clone(),
+    // Generate the ID for the button/progress indicator
+    let status_elem_id = libitem_status_elem_id(&id);
+
+    // Define the Add to Queue callback
+    let add_to_queue = library_link.callback_once(move |_| {
+        // Tell the library to fetch the article. This will change the button to a progress
+        // indicator
+        LibraryMsg::FetchArticle {
+            id: id.clone(),
+            title: title_copy.clone(),
+        }
     });
 
     // Make a source URL link if it exists and is valid. Otherwise make this part empty.
@@ -143,47 +157,51 @@ fn render_lib_item(
 
     // If the article is downloading, display download progress instead of the "Add to Queue"
     // button
-    let elem_id = format!("lib-{}", metadata.id);
-
     let add_to_queue_button = if let Some(progress) = download_progress {
         match progress {
+            // If it's in progress, show the percentage in smallish text
             DownloadProgress::InProgress(fraction) => {
                 let pct_val = format!("{}", (100.0 * fraction).floor() as usize);
                 let pct_str = format!("{}%", pct_val);
-                let title_text = format!("Downloading {title}");
+                let title_text = format!("Downloading: {title}");
                 html! {
-                    <p
-                        class="percentage"
-                        id={ elem_id }
+                    <div
+                        class="libEntryStatus"
+                        tabindex="-1"
+                        id={ status_elem_id }
                         role="progressbar"
                         aria-valuenow={ pct_val }
                         aria-label={ title_text.clone() }
                         title={ title_text }
                     >
-                        { pct_str }
-                    </p>
+                        <span aria-hidden="true">{ pct_str }</span>
+                    </div>
                 }
             }
+            // If it's done downloading display "Queued" in smallish text
             DownloadProgress::Done => {
-                let title_text = format!("Downloaded {title}");
+                let title_text = format!("Queued: {title}");
                 html! {
-                    <p
-                        class="downloadDone"
-                        id={ elem_id }
+                    <div
+                        class="libEntryStatus"
+                        role="status"
+                        tabindex="-1"
+                        id={ status_elem_id }
                         aria-label={ title_text.clone() }
                         title={ title_text }
                     >
-                        { "Queued" }
-                    </p>
+                        <span aria-hidden="true">{ "Queued" }</span>
+                    </div>
                 }
             }
         }
     } else {
+        // If the article isn't being downloaded, display an Add to Queue button
         let add_title_text = format!("Add to queue: {}", title);
         html! {
             <button
-                id={ elem_id }
-                onclick={ callback }
+                id={ status_elem_id }
+                onclick={ add_to_queue }
                 aria-label={ add_title_text.clone() }
                 title={ add_title_text }
             >
@@ -232,9 +250,12 @@ pub(crate) enum LibraryMsg {
     FetchCatalog,
     /// Updates the download progress of the given article
     SetDownloadProgress { id: ArticleId, progress: f64 },
+    /// Sets the browser focus on the HTML element with the given DOM ID
+    SetFocus(String),
     /// Tells the Library to send the given queue entry to the Queue
     PassArticleToQueue(QueueEntry),
-    /// Sets the given articles as "Downloaded" in the library view
+    /// Sets the given articles as "Downloaded" in the library view. This is called by the Queue on
+    /// startup.
     MarkAsQueued(Vec<ArticleId>),
     /// Sets the given article as Not Downloaded in the library view
     MarkAsUnqueued(ArticleId),
@@ -258,10 +279,12 @@ impl Component for Library {
                 self.err = None;
                 self.catalog = Some(catalog);
             }
+
             LibraryMsg::SetError(err) => {
                 self.catalog = None;
                 self.err = Some(err);
             }
+
             LibraryMsg::FetchCatalog => {
                 ctx.link().send_future(async move {
                     match fetch_catalog().await {
@@ -270,6 +293,7 @@ impl Component for Library {
                     }
                 });
             }
+
             LibraryMsg::FetchArticle { id, title } => {
                 // We've been asked to fetch an article. Immediately set its progress to 0%
                 self.download_progresses
@@ -277,43 +301,79 @@ impl Component for Library {
 
                 // Fetch an article, save it, and relay the article handle. If there's an error,
                 // post it
+                let id_copy = id.clone();
+                ctx.link().send_future(async move {
+                    let article = match fetch_article(&id_copy, &title, lib_link).await {
+                        Ok(a) => a,
+                        Err(e) => return LibraryMsg::SetError(e),
+                    };
+
+                    let queue_entry = match caching::save_article(&article).await {
+                        Ok(h) => h,
+                        Err(e) => return LibraryMsg::SetError(e),
+                    };
+
+                    LibraryMsg::PassArticleToQueue(queue_entry)
+                });
+
+                // When the Add to Queue button is pressed, the button turns into a progress
+                // indicator. By default, this indicator does not receive cursor focus. For
+                // accessibility, it's better if it does. So in the next tick of this function,
+                // shift the focus to the newly rendered element.
+                let status_elem_id = libitem_status_elem_id(&id);
                 ctx.link()
-                    .callback_future_once(|()| async move {
-                        let article = match fetch_article(&id, &title, lib_link).await {
-                            Ok(a) => a,
-                            Err(e) => return LibraryMsg::SetError(e),
-                        };
-
-                        let queue_entry = match caching::save_article(&article).await {
-                            Ok(h) => h,
-                            Err(e) => return LibraryMsg::SetError(e),
-                        };
-
-                        LibraryMsg::PassArticleToQueue(queue_entry)
-                    })
-                    .emit(());
+                    .send_future(async move { LibraryMsg::SetFocus(status_elem_id) });
             }
+
+            LibraryMsg::SetFocus(elem_id) => {
+                // Focus the HTML element with the given ID
+                gloo_utils::document()
+                    .get_element_by_id(&elem_id)
+                    .unwrap()
+                    .dyn_into::<web_sys::HtmlElement>()
+                    .unwrap()
+                    .focus()
+                    .unwrap();
+            }
+
             LibraryMsg::SetDownloadProgress { id, progress } => {
                 // Update the article's download progress
                 self.download_progresses
                     .insert(id.clone(), DownloadProgress::InProgress(progress));
             }
-            LibraryMsg::PassArticleToQueue(queue_entry) => {
-                // Mark the article as downloaded
-                self.download_progresses
-                    .insert(queue_entry.id.clone(), DownloadProgress::Done);
 
-                // If we saved an article, pass the notif to the queue
+            LibraryMsg::PassArticleToQueue(queue_entry) => {
+                // Tell the queue about the article
                 ctx.props()
                     .queue_link
                     .borrow()
                     .clone()
                     .unwrap()
-                    .send_message(QueueMsg::Add(queue_entry));
+                    .send_message(QueueMsg::Add(queue_entry.clone()));
+
+                // Being entered into the queue means it's done downloading. Mark it done. This
+                // will turn the progress indicator into the text "Queued".
+                self.download_progresses
+                    .insert(queue_entry.id.clone(), DownloadProgress::Done);
+
+                // If the download progress indicator was focused, the browser will not necessarily
+                // focus on the new "Queued" text. For accessibility, we manually shift the focus.
+                // The IDs of both are the same.
+                let status_elem_id = libitem_status_elem_id(&queue_entry.id);
+                if gloo_utils::document()
+                    .active_element()
+                    .map(|e| e.id() == status_elem_id)
+                    .unwrap_or(false)
+                {
+                    // If we were focusing on the progress element, focus on the "Queued" element.
+                    // Again, these have the same ID
+                    ctx.link()
+                        .send_future(async move { LibraryMsg::SetFocus(status_elem_id) });
+                }
             }
 
             LibraryMsg::MarkAsQueued(ids) => {
-                // Mark the article as downloaded
+                // Anything in the queue is downloaded by definition. Mark them downloaded.
                 ids.iter().for_each(|id| {
                     self.download_progresses
                         .insert(id.clone(), DownloadProgress::Done);
@@ -326,6 +386,7 @@ impl Component for Library {
             }
         }
 
+        // Every one of the above messages causes a visible change in the library
         true
     }
 

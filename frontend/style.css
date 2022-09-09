@@ -112,7 +112,7 @@ td {
     text-align: center;
     margin: 0;
 }
-.addToQueue p {
+.libEntryStatus {
     font-size: 0.8rem;
 }
 .libArticleTitle {

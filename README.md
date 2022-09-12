@@ -8,14 +8,14 @@
 |
 [**Live Site**](https://beta.readtomyshoe.com)
 
-ReadtoMyShoe (RTMS) is a web app that lets you download and listen to web articles. Some features:
+ReadtoMyShoe (RTMS) is a web app that lets you upload articles (via URL or via directly pasting) and listen to them later. Some features:
 
 * **Offline-first:** All the articles in your queue are available offline. RTMS is usable even in airplane mode.
 * **High-quality text-to-speech:** RTMS uses the Google Cloud Text to Speech [WaveNet voices](https://cloud.google.com/text-to-speech/docs/wavenet). It's not quite human yet, but it's pretty nice.
 * **Saves your progress:** Don't lose your place in your reading material. RTMS will save where you are. So next time you play an article, it'll resume right where you left off.
 * **Lockscreen controls:** Play, pause, jump 10 seconds. It's all available from the lock screen or notification bar of your mobile device.
 * **Runs anywhere:** Since RTMS is a web app, it runs everywhere a (modern) web browser runs.
-* **Add to Homescreen:** RTSM can be added to your homescreen and behave just like a native app.
+* **Add to Homescreen:** RTMS can be added to your homescreen and behave just like a native app.
 
 RTMS is written in Rust, using [yew](https://yew.rs/) for the frontend (compiles to WASM) and [axum](https://github.com/tokio-rs/axum) for the backend.
 

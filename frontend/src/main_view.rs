@@ -148,8 +148,17 @@ fn header() -> Html {
         </>
     };
 
+    let shutdown_warning = html! {
+        <p id="shutdownWarning"><strong>{"Notice: "}</strong>{"
+        This is a demo server. Text to speech is expensive. You will be able to add new articles
+        until I have spent $300. This server will be up for about a week.
+        "}</p>
+    };
+
     html! {
         <header>
+            { shutdown_warning }
+            <br />
             <img class="headerLogo" src={LOGO_PATH}
              alt="ReadToMyShoe logo: A sneaker wearing a headset with a microphone" />
             <h1>{ "ReadToMyShoe" }</h1>

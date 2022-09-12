@@ -2,6 +2,12 @@
  * Some general styling
  */
 
+#shutdownWarning {
+    background-color: #aa3618;
+    color: white;
+    padding: 0.4em;
+}
+
 *:focus-visible {
     outline: 2px solid #d71ef7;
 }

@@ -7,7 +7,7 @@ RUSTFLAGS=--cfg=web_sys_unstable_apis trunk build --release --public-url /assets
 popd
 
 pushd server
-cargo run --release -- --port 9382
+cargo run --release -- --port 9382 --addr 0.0.0.0
 popd
 
 # Full backend options. You can get these by running `cargo run --release -- --help` in server/

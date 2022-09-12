@@ -5,6 +5,8 @@
 # ReadToMyShoe
 
 [**Video Demo**](https://www.dropbox.com/s/7i65qyv2i9uosp5/readtomyshoe_demo.mp4?dl=0)
+|
+[**Live Site**](https://beta.readtomyshoe.com)
 
 ReadtoMyShoe (RTMS) is a web app that lets you download and listen to web articles. Some features:
 

@@ -12,7 +12,8 @@ use std::{
 };
 
 use axum::{
-    http::{HeaderValue, StatusCode},
+    body::Body,
+    http::{HeaderValue, Request, StatusCode},
     response::Response,
     routing::{get, get_service},
     Router,
@@ -102,7 +103,12 @@ async fn main() {
     let app = app.route("/healthz", get(|| async { "ok" }));
 
     // Tracing for the entire app
-    let app = app.layer(TraceLayer::new_for_http());
+    let app = app.layer(
+        TraceLayer::new_for_http().make_span_with(|req: &Request<Body>| {
+            // Log the IP given by the reverse proxy
+            tracing::debug_span!("http-request", client_ip = ?req.headers().get("X-Forwarded-For"))
+        }),
+    );
 
     // Set up the server
     let sock_addr = SocketAddr::from((

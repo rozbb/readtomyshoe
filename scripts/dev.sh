@@ -8,7 +8,8 @@ IFS=$'\n\t'
     CARGO_TARGET_DIR=target-trunk \
         RUSTFLAGS=--cfg=web_sys_unstable_apis \
         trunk serve \
-            --port 9382' \
+            --port 9382 \
+            --address 0.0.0.0' \
  & \
  bash -c ' \
      cd server; \

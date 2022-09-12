@@ -24,6 +24,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # Will install the tools needed to build the webapp
 RUN rustup target add wasm32-unknown-unknown
 RUN cargo install --locked trunk
+RUN cargo install -f --git "https://github.com/rustwasm/wasm-bindgen.git" --rev "e47dda5" wasm-bindgen-cli
 
 # Copy the rest.
 COPY . .
@@ -64,4 +65,4 @@ COPY ./server/gcp_api.key ./server/
 # Go to where the binary is
 WORKDIR /app/server
 
-CMD ./readtomyshoe-server --port 8080 --addr 0.0.0.0
+CMD ./readtomyshoe-server --port 9382 --addr 0.0.0.0

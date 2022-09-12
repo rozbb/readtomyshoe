@@ -5,10 +5,10 @@ kill_signal = "SIGINT"
 kill_timeout = 5
 
 [env]
-  PORT = "8080"
+  PORT = "9382"
 
 [[services]]
-  internal_port = 8080
+  internal_port = 9382
   protocol = "tcp"
   [services.concurrency]
     hard_limit = 25
@@ -25,6 +25,6 @@ kill_timeout = 5
   [[services.tcp_checks]]
     grace_period = "1s"
     interval = "15s"
-    port = "8080"
+    port = "9382"
     restart_limit = 6
     timeout = "2s"

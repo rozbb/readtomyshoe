@@ -6,17 +6,17 @@ members = [
 ]
 
 [patch.crates-io.web-sys]
-git = "https://github.com/rozbb/wasm-bindgen.git"
-rev = "46c450cb5fc1c7924bf58ef295d656b2b3c84678"
+git = "https://github.com/rustwasm/wasm-bindgen.git"
+rev = "e47dda5c8646317c23b41ae1f5496633dd9c3167"
 
 [patch.crates-io.js-sys]
-git = "https://github.com/rozbb/wasm-bindgen.git"
-rev = "46c450cb5fc1c7924bf58ef295d656b2b3c84678"
+git = "https://github.com/rustwasm/wasm-bindgen.git"
+rev = "e47dda5c8646317c23b41ae1f5496633dd9c3167"
 
 [patch.crates-io.wasm-bindgen]
-git = "https://github.com/rozbb/wasm-bindgen.git"
-rev = "46c450cb5fc1c7924bf58ef295d656b2b3c84678"
+git = "https://github.com/rustwasm/wasm-bindgen.git"
+rev = "e47dda5c8646317c23b41ae1f5496633dd9c3167"
 
 [patch.crates-io.wasm-bindgen-futures]
-git = "https://github.com/rozbb/wasm-bindgen.git"
-rev = "46c450cb5fc1c7924bf58ef295d656b2b3c84678"
+git = "https://github.com/rustwasm/wasm-bindgen.git"
+rev = "e47dda5c8646317c23b41ae1f5496633dd9c3167"

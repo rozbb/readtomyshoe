@@ -43,7 +43,7 @@ struct Opt {
     addr: String,
 
     /// The listen port
-    #[clap(short = 'p', long = "port", default_value = "8080")]
+    #[clap(short = 'p', long = "port", default_value = "9382")]
     port: u16,
 
     /// The directory where static files are to be found

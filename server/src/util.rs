@@ -20,6 +20,15 @@ const FILENAME_TITLE_MAXLEN: usize = 20;
 /// BEFORE it is encoded in zbase32.
 const ARTICLE_HASH_BITLEN: u64 = 128;
 
+/// Defines how we sanitize article filenames. This assumes we're on Windows (which is more
+/// restrictive), doesn't truncate the filename (we do that ourselves), and replaces sanitized
+/// characters with '_'
+const SANITIZATION_OPTIONS: sanitize_filename::Options<'static> = sanitize_filename::Options {
+    windows: true,
+    truncate: false,
+    replacement: "_",
+};
+
 /// Used in `truncate_to_bytes` to specify the byte encoding of the string to be truncated
 pub(crate) enum StrEncoding {
     Utf8,
@@ -72,11 +81,13 @@ fn hash_article(ArticleTextSubmission { title, body }: &ArticleTextSubmission) -
     let digest = h.finalize();
     zbase32::encode(&digest, ARTICLE_HASH_BITLEN)
 }
-
-/// Derives the unique ID of this article. It's of the form SHORTTITLE-HASH.mp3
+/// Derives the unique ID of this article. It's of the form SHORTTITLE-HASH.mp3, where SHORTTITLE
+/// is the sanitized, truncated title of the article
 pub fn derive_article_id(article: &ArticleTextSubmission) -> String {
+    let sanitized_title =
+        sanitize_filename::sanitize_with_options(&article.title, SANITIZATION_OPTIONS);
     let truncated_title =
-        truncate_to_bytes(&article.title, FILENAME_TITLE_MAXLEN, StrEncoding::Utf8);
+        truncate_to_bytes(&sanitized_title, FILENAME_TITLE_MAXLEN, StrEncoding::Utf8);
     let hash = hash_article(&article);
     format!("{truncated_title}-{hash}.mp3")
 }

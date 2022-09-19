@@ -256,8 +256,6 @@ async fn tts_to_file(file: &mut File, text: String) -> Result<(), AddArticleErro
     // Use the language detector to pick the TTS voice
     let voice_name = pick_tts_voice(&text, VoiceQuality::High, VoiceType::HighPitch)?;
 
-    return Err(anyhow::anyhow!("Got voice {voice_name}"))?;
-
     // Make the TTS request
     let req = TtsRequest { text, voice_name };
     let bytes = tts(&api_key, req)

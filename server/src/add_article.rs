@@ -1,5 +1,6 @@
 use crate::{
-    tts::{get_api_key, tts, TtsRequest},
+    lang::pick_tts_voice,
+    tts::{get_api_key, tts, TtsRequest, VoiceQuality, VoiceType},
     util::{derive_article_id, save_metadata, truncate_to_bytes, StrEncoding},
 };
 use common::{
@@ -252,11 +253,13 @@ async fn add_article_by_url(
 async fn tts_to_file(file: &mut File, text: String) -> Result<(), AddArticleError> {
     let api_key = get_api_key().map_err(|e| anyhow!("Failed to get Google API key: {:?}", e))?;
 
+    // Use the language detector to pick the TTS voice
+    let voice_name = pick_tts_voice(&text, VoiceQuality::High, VoiceType::HighPitch)?;
+
+    return Err(anyhow::anyhow!("Got voice {voice_name}"))?;
+
     // Make the TTS request
-    let req = TtsRequest {
-        text,
-        use_wavenet: true,
-    };
+    let req = TtsRequest { text, voice_name };
     let bytes = tts(&api_key, req)
         .await
         .map_err(|e| anyhow!("TTS failed: {:?}", e))?;

@@ -1,4 +1,5 @@
 mod add_article;
+mod lang;
 mod list_articles;
 mod tts;
 mod util;

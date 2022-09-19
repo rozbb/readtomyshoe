@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Additions
+- Added language detection
+
 ### Fixes
 - Fixed bug where a `/` in the article title would cause a file creation error. Triggered by [this](http://strangehorizons.com/non-fiction/writing-realizing-disability-power/) article.
 

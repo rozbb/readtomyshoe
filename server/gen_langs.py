@@ -133,7 +133,12 @@ conn = http.client.HTTPSConnection("texttospeech.googleapis.com", 443)
 conn.request("GET", f"/v1beta1/voices?key={api_key}")
 resp = conn.getresponse()
 payload = resp.read()
-voices = json.loads(payload)["voices"]
+try:
+    voices = json.loads(payload)["voices"]
+except:
+    print("Invalid response")
+    print(payload.decode("utf8"))
+    exit()
 
 # We have to sort the voices a bit. It should probably be the case that the country with the largest
 # number of speakers appears first for each language, so that the default option for that language

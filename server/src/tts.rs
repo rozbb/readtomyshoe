@@ -21,29 +21,51 @@ struct AudioResponse<'a> {
     audio_content: &'a str,
 }
 
+/// Denotes the voice quality options with Google Cloud
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub(crate) enum VoiceQuality {
+    /// The standard quality
+    Standard,
+    /// Represents Neural2 or Wavenet if the Neural2 version of whatever the client wants is not
+    /// available
+    High,
+}
+
+/// Voices are only classified as high or low pitch
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub(crate) enum VoiceType {
+    HighPitch,
+    LowPitch,
+}
+
+/// The description of a Google Cloud TTS reading voice
+#[derive(Clone, Copy)]
+pub(crate) struct GcpVoice {
+    /// The unique voice identifier
+    pub(crate) id: &'static str,
+    // The English description of this voice. E.g., "Portuguese (Brazil)"
+    pub(crate) english_desc: &'static str,
+    /// The type of voice this is (high/low)
+    pub(crate) ty: VoiceType,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct TtsRequest {
     /// The contents of the request
     pub text: String,
-    /// Whether or not to use the expensive voices
-    pub use_wavenet: bool,
+    /// The Google TTS voice to use
+    pub voice_name: &'static str,
 }
 
 impl TtsRequest {
     fn into_json(&self) -> serde_json::Value {
-        let voice_name = if self.use_wavenet {
-            "en-US-Wavenet-C"
-        } else {
-            "en-US-Standard-C"
-        };
-
         serde_json::json!({
             "input": {
                 "text": self.text
             },
             "voice":{
                 "languageCode":"en-US",
-                "name": voice_name,
+                "name": self.voice_name,
             },
             "audioConfig":{
                 "audioEncoding": "MP3_64_KBPS",
@@ -97,7 +119,7 @@ pub(crate) async fn tts_single(api_key: &str, req: &TtsRequest) -> Result<Bytes,
 /// Speaks text string. Returns an error if an error occurs in the Google Cloud API call.
 pub(crate) async fn tts(
     api_key: &str,
-    TtsRequest { text, use_wavenet }: TtsRequest,
+    TtsRequest { text, voice_name }: TtsRequest,
 ) -> Result<Bytes, AnyError> {
     let api_key_iter = core::iter::repeat(api_key);
 
@@ -111,7 +133,7 @@ pub(crate) async fn tts(
             async move {
                 let slice_req = TtsRequest {
                     text: slice,
-                    use_wavenet,
+                    voice_name,
                 };
                 tts_single(&api_key, &slice_req).await
             }

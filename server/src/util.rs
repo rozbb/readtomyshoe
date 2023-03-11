@@ -3,6 +3,7 @@ use common::{ArticleMetadata, ArticleTextSubmission};
 use std::{
     fs::DirEntry,
     path::Path,
+    time::Duration,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -11,6 +12,12 @@ use blake2::{Blake2s256, Digest};
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
 use id3::{Tag, TagLike, Version};
+use symphonia_bundle_mp3::{MpaDecoder, MpaReader};
+use symphonia_core::{
+    codecs::{CodecParameters, Decoder, DecoderOptions, CODEC_TYPE_MP3},
+    formats::{FormatOptions, FormatReader},
+    io::{MediaSourceStream, MediaSourceStreamOptions, ReadOnlySource},
+};
 
 /// Filenames in `audio_blobs` are of the form `TITLE-HASH.mp3`. This is maximum number of bytes
 /// allowed in `TITLE`. This MUST be less than 256.
@@ -108,13 +115,7 @@ pub fn save_metadata(meta: &ArticleMetadata, audio_blob_dir: &str) -> Result<(),
 
     // Set the ID3 recording date to be the date the article was added
     if let Some(added) = meta.datetime_added {
-        let date = NaiveDateTime::from_timestamp(
-            added
-                .try_into()
-                .expect("it is 2038 and chrono still uses i64 for unix time"),
-            0,
-        );
-        let date = DateTime::<Utc>::from_utc(date, Utc);
+        let date = epoch_secs_to_datetime(added);
         tag.set_date_recorded(id3::Timestamp {
             year: date.year(),
             month: Some(date.month() as u8),
@@ -133,6 +134,16 @@ pub fn save_metadata(meta: &ArticleMetadata, audio_blob_dir: &str) -> Result<(),
     // Now write
     tag.write_to_path(savepath, Version::Id3v24)
         .map_err(Into::into)
+}
+
+/// Converts seconds since epoch to UTC datetime
+pub(crate) fn epoch_secs_to_datetime(secs: u64) -> DateTime<Utc> {
+    let date = NaiveDateTime::from_timestamp(
+        secs.try_into()
+            .expect("it is 2038 and chrono still uses i64 for unix time"),
+        0,
+    );
+    DateTime::<Utc>::from_utc(date, Utc)
 }
 
 /// Gets article metadata from ID3 tags in the MP3 file:
@@ -192,6 +203,42 @@ pub fn get_metadata(entry: &DirEntry) -> Result<ArticleMetadata, AnyError> {
     }
 
     Ok(meta)
+}
+
+/// Returns the true duration of an MP3 file. This is somewhat expensive, so it should only be
+/// computed once, and cached in the metadata
+fn get_mp3_duration(path: &std::path::PathBuf) -> Result<Duration, symphonia_core::errors::Error> {
+    // Make the file into an input stream
+    let f = std::fs::File::open(&path)?;
+    let src = ReadOnlySource::new(f);
+    let media_src = MediaSourceStream::new(
+        Box::new(src),
+        MediaSourceStreamOptions {
+            buffer_len: 1048576, // 1MB
+        },
+    );
+    let mut mp3 = MpaReader::try_new(media_src, &FormatOptions::default())?;
+
+    // Get the sample rate from the first packet. Also record the number of samples
+    let mut decoder = MpaDecoder::try_new(
+        &CodecParameters::default().for_codec(CODEC_TYPE_MP3),
+        &DecoderOptions::default(),
+    )
+    .unwrap();
+    let (sample_rate, mut num_samples) = {
+        // Get the first packet and decode it for the sample rate
+        let first_packet = mp3.next_packet()?;
+        let sample_rate = decoder.decode(&first_packet).map(|buf| buf.spec().rate)?;
+        (sample_rate, first_packet.dur)
+    };
+    // Let num_samples be the number of samples over *all* the packets
+    while let Ok(p) = mp3.next_packet() {
+        num_samples += p.dur;
+    }
+    // Compute the duration in seconds
+    Ok(Duration::from_secs_f64(
+        num_samples as f64 / sample_rate as f64,
+    ))
 }
 
 #[test]

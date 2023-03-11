@@ -1,4 +1,4 @@
-use crate::util::get_metadata;
+use crate::{error::RtmsError, util::get_metadata};
 
 use std::{
     collections::BTreeMap,
@@ -10,7 +10,11 @@ use std::{
 
 use common::{ArticleMetadata, LibraryCatalog};
 
-use axum::{extract::Extension, http::StatusCode, routing::get, Json, Router};
+use anyhow::bail;
+use axum::{
+    extract::Extension, headers::ContentType, response::IntoResponse, routing::get, Json, Router,
+    TypedHeader,
+};
 use tower_http::compression::CompressionLayer;
 
 /// The in-memory metadata cache of all the articles in the library. There is currently no way to
@@ -23,6 +27,7 @@ pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
         "/api",
         Router::new()
             .route("/list-articles", get(list_articles))
+            .route("/feed", get(get_rss))
             .layer(Extension(audio_blob_dir.to_string()))
             .layer(Extension(LibraryCache::default()))
             .layer(CompressionLayer::new()),
@@ -33,13 +38,130 @@ pub(crate) fn setup(router: Router, audio_blob_dir: &str) -> Router {
 async fn list_articles(
     Extension(audio_blob_dir): Extension<String>,
     Extension(metadata_cache): Extension<LibraryCache>,
-) -> Result<Json<LibraryCatalog>, StatusCode> {
+) -> Result<Json<LibraryCatalog>, RtmsError> {
+    // Get the catalog
+    let mut library_catalog = get_library_catalog(audio_blob_dir, metadata_cache)?;
+    // Sort by time modified, most recently modified first
+    library_catalog
+        .0
+        .sort_by_key(|meta| std::cmp::Reverse(meta.datetime_added));
+
+    // Done
+    Ok(Json(library_catalog))
+}
+
+use crate::util::epoch_secs_to_datetime;
+
+/// Builds an RSS feed from the existing library catalog
+pub(crate) async fn get_rss(
+    Extension(audio_blob_dir): Extension<String>,
+    Extension(metadata_cache): Extension<LibraryCache>,
+) -> Result<impl IntoResponse, RtmsError> {
+    // Get the catalog
+    let library_catalog = get_library_catalog(audio_blob_dir, metadata_cache)?;
+
+    fn render_item(f: &mut std::fmt::Formatter, item: &ArticleMetadata) -> std::fmt::Result {
+        // Convert the time added to an RFC 2822 string, or the empty string if it doesn't exist
+        let datetime_added = item
+            .datetime_added
+            .map(epoch_secs_to_datetime)
+            .as_ref()
+            .map(chrono::DateTime::to_rfc2822)
+            .unwrap_or(String::new());
+
+        let mp3_url = {
+            let filename = format!("{}.mp3", item.id);
+            let encoded_title = urlencoding::encode(&filename);
+            format!("http://localhost:9382/api/audio-blobs/{encoded_title}")
+        };
+        let source_text = item
+            .source_url
+            .as_ref()
+            .map(|url| {
+                format_xml::format! {
+                    <a href={url}>"Source"</a>
+                }
+            })
+            .unwrap_or(String::new());
+
+        format_xml::write!(f,
+            <item locked="false" ads="false" spons="false">
+              <title>{item.title}</title>
+              <pubDate>{datetime_added}</pubDate>
+              <itunes:duration>0</itunes:duration>
+              <enclosure url={mp3_url} length="0" type="audio/mpeg"/>
+              <itunes:explicit>"no"</itunes:explicit>
+              <link/>
+              <itunes:episodeType>"full"</itunes:episodeType>
+              <itunes:summary>{source_text}</itunes:summary>
+              <description>{source_text}</description>
+            </item>
+        )
+    }
+
+    // We have to split this out because the expression gets too big otherwise
+    fn render_channel_header(f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        format_xml::write!(f,
+          <title>"ReadToMyShoe"</title>
+          <language>"en"</language>
+          <copyright>"Owners"</copyright>
+          <itunes:author>"RTMS"</itunes:author>
+          <itunes:subtitle/>
+          <itunes:summary>"ReadToMyShoe's Feed"</itunes:summary>
+          <description>"ReadToMyShoe's Feed"</description>
+          <itunes:explicit>"yes"</itunes:explicit>
+        )?; // Need to break this up because it reaches the recursion limit :(
+        format_xml::write!(f,
+            <itunes:owner>
+              <itunes:name>"Big Grande"</itunes:name>
+              <itunes:email>"me@example.com"</itunes:email>
+            </itunes:owner>
+            <itunes:type>"episodic"</itunes:type>
+            <itunes:image href="http://localhost:9382/rtms-color-512x512.png"/>
+            <image>
+              <url>"rtms-color-512x512.png"</url>
+              <link>"https://shows.acast.com/last-resort"</link>
+              <title>"ReadToMyShoe"</title>
+            </image>
+            <itunes:category text="News &amp; Politics"/>
+        )
+    }
+
+    let xml = format_xml::format! {
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <?xml-stylesheet type="text/xsl" media="screen" href="/template/rss.xsl"?>
+        <rss
+            version="2.0"
+            xmlns:atom="http://www.w3.org/2005/Atom"
+            xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+            xmlns:media="http://search.yahoo.com/mrss/">
+        <channel>
+            // Render the channel beginning
+            |f| render_channel_header(f)?;
+
+            // Render the items in the channel
+            for item in library_catalog.0.iter() {
+                |f| render_item(f, item)?;
+            }
+        </channel>
+        </rss>
+    };
+
+    Ok((TypedHeader(ContentType::xml()), xml))
+}
+
+/// Fetches the library catalog, either reading from the cache, or reading from disk if the cache
+/// is missing data
+fn get_library_catalog(
+    audio_blob_dir: String,
+    metadata_cache: LibraryCache,
+) -> Result<LibraryCatalog, anyhow::Error> {
     // Try to open the directory
     let dir: fs::ReadDir = match fs::read_dir(audio_blob_dir) {
         Ok(d) => d,
         Err(e) => {
             tracing::error!("error reading dir {}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            bail!("error reading dir {}", e)
         }
     };
 
@@ -88,12 +210,5 @@ async fn list_articles(
         })
         .collect::<Vec<ArticleMetadata>>();
 
-    // Package the metadata and sort by time modified, most recently modified first
-    let mut library_catalog = LibraryCatalog(metadatas);
-    library_catalog
-        .0
-        .sort_by_key(|meta| std::cmp::Reverse(meta.datetime_added));
-
-    // Done
-    Ok(Json(library_catalog))
+    Ok(LibraryCatalog(metadatas))
 }

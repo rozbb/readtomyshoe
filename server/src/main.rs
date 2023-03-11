@@ -1,4 +1,5 @@
 mod add_article;
+mod error;
 mod lang;
 mod list_articles;
 mod tts;

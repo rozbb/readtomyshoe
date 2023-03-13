@@ -2,7 +2,7 @@ use crate::{
     error::RtmsError,
     lang::pick_tts_voice,
     tts::{get_api_key, tts, TtsRequest, VoiceQuality, VoiceType},
-    util::{derive_article_id, save_metadata, truncate_to_bytes, StrEncoding},
+    util::{derive_article_id, get_mp3_duration, save_metadata, truncate_to_bytes, StrEncoding},
 };
 use common::{
     ArticleMetadata, ArticleTextSubmission, ArticleUrlSubmission, MAX_TITLE_UTF16_CODEUNITS,
@@ -168,6 +168,9 @@ async fn add_article_by_text(
     std::fs::rename(&tmp_savepath, &savepath)
         .map_err(|e| anyhow!("could not rename {:?} to {:?}: {e}", tmp_savepath, savepath))?;
 
+    // Measure its duration. This goes in metadata
+    let article_duration = get_mp3_duration(&savepath).ok();
+
     // Get the current time. This is the official time the article was added to the library
     let unix_epoch_now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -188,6 +191,7 @@ async fn add_article_by_text(
     Ok(ArticleMetadata {
         id,
         title: truncated_title,
+        duration: article_duration,
         datetime_added: Some(unix_epoch_now),
         source_url: None,
     })

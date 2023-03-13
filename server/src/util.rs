@@ -173,15 +173,17 @@ pub fn get_metadata(entry: &DirEntry) -> Result<ArticleMetadata, AnyError> {
     let mut meta = ArticleMetadata {
         title: id.clone(),
         id,
+        duration: None,
         source_url: None,
         datetime_added: last_modified_timestamp,
     };
 
     // Try to get the metadata from the ID3 tags
     if let Ok(tag) = Tag::read_from_path(path) {
-        // Try to get the ID3 title and source URL (URL is in the Artist field)
+        // Try to get the ID3 title, source URL (URL is in the Artist field), and duration
         meta.title = tag.title().unwrap_or(&meta.title).to_string();
         meta.source_url = tag.artist().map(str::to_string);
+        meta.duration = tag.duration().map(|t| Duration::from_secs(t as u64));
 
         // Extract the time recorded and convert it back to a unix timestamp. It's a pain
         let datetime_added = tag.date_recorded().and_then(|recorded| {
@@ -207,7 +209,7 @@ pub fn get_metadata(entry: &DirEntry) -> Result<ArticleMetadata, AnyError> {
 
 /// Returns the true duration of an MP3 file. This is somewhat expensive, so it should only be
 /// computed once, and cached in the metadata
-fn get_mp3_duration(path: &std::path::PathBuf) -> Result<Duration, symphonia_core::errors::Error> {
+pub(crate) fn get_mp3_duration(path: &std::path::PathBuf) -> Result<Duration, anyhow::Error> {
     // Make the file into an input stream
     let f = std::fs::File::open(&path)?;
     let src = ReadOnlySource::new(f);
@@ -224,7 +226,7 @@ fn get_mp3_duration(path: &std::path::PathBuf) -> Result<Duration, symphonia_cor
         &CodecParameters::default().for_codec(CODEC_TYPE_MP3),
         &DecoderOptions::default(),
     )
-    .unwrap();
+    .expect("could not construct basic MP3 decoder");
     let (sample_rate, mut num_samples) = {
         // Get the first packet and decode it for the sample rate
         let first_packet = mp3.next_packet()?;

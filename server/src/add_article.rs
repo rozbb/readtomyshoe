@@ -135,8 +135,8 @@ async fn add_article_by_text(
 
     let id = derive_article_id(&article);
 
-    // Fail if the article already exists
-    let savepath = Path::new(&audio_blob_dir).join(&id).with_extension("mp3");
+    // Fail if the article already exists. The filename is ID.mp333
+    let savepath = Path::new(&audio_blob_dir).join(&format!("{id}.mp3"));
     if savepath.exists() {
         Err(anyhow!("File '{:?}' already exists", savepath))?;
     }

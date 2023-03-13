@@ -15,6 +15,7 @@ use axum::{
     extract::Extension, headers::ContentType, response::IntoResponse, routing::get, Json, Router,
     TypedHeader,
 };
+use format_xml::{format as xformat, write as xwrite};
 use tower_http::compression::CompressionLayer;
 
 /// The in-memory metadata cache of all the articles in the library. There is currently no way to
@@ -69,39 +70,57 @@ pub(crate) async fn get_rss(
             .map(chrono::DateTime::to_rfc2822)
             .unwrap_or(String::new());
 
+        // The URL where the MP3 for this item lives
         let mp3_url = {
             let filename = format!("{}.mp3", item.id);
             let encoded_title = urlencoding::encode(&filename);
             format!("http://localhost:9382/api/audio-blobs/{encoded_title}")
         };
+
+        // An <a> link for the source of this article, if one exists
         let source_text = item
             .source_url
             .as_ref()
             .map(|url| {
-                format_xml::format! {
+                xformat! {
                     <a href={url}>"Source"</a>
                 }
             })
             .unwrap_or(String::new());
 
-        format_xml::write!(f,
+        // The duration of this article, rounded to the nearest second, if it exists
+        let duration_text = item
+            .duration
+            .as_ref()
+            .map(|dur| {
+                let mut secs = dur.as_secs();
+                if dur.subsec_millis() >= 500 {
+                    secs += 1;
+                }
+                xformat! {
+                    <itunes:duration>{secs}</itunes:duration>
+                }
+            })
+            .unwrap_or(String::new());
+
+        xwrite!(f,
             <item locked="false" ads="false" spons="false">
               <title>{item.title}</title>
               <pubDate>{datetime_added}</pubDate>
-              <itunes:duration>0</itunes:duration>
+              |f| f.write_str(&duration_text)?;
               <enclosure url={mp3_url} length="0" type="audio/mpeg"/>
               <itunes:explicit>"no"</itunes:explicit>
               <link/>
               <itunes:episodeType>"full"</itunes:episodeType>
-              <itunes:summary>{source_text}</itunes:summary>
-              <description>{source_text}</description>
+              <itunes:summary>|f| f.write_str(&source_text)?;</itunes:summary>
+              <description>|f| f.write_str(&source_text)?;</description>
             </item>
         )
     }
 
     // We have to split this out because the expression gets too big otherwise
     fn render_channel_header(f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        format_xml::write!(f,
+        xwrite!(f,
           <title>"ReadToMyShoe"</title>
           <language>"en"</language>
           <copyright>"Owners"</copyright>
@@ -111,7 +130,7 @@ pub(crate) async fn get_rss(
           <description>"ReadToMyShoe's Feed"</description>
           <itunes:explicit>"yes"</itunes:explicit>
         )?; // Need to break this up because it reaches the recursion limit :(
-        format_xml::write!(f,
+        xwrite!(f,
             <itunes:owner>
               <itunes:name>"ReadToMyShoe"</itunes:name>
             </itunes:owner>
@@ -126,7 +145,7 @@ pub(crate) async fn get_rss(
         )
     }
 
-    let xml = format_xml::format! {
+    let xml = xformat! {
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <?xml-stylesheet type="text/xsl" media="screen" href="/template/rss.xsl"?>
         <rss
@@ -146,7 +165,7 @@ pub(crate) async fn get_rss(
         </rss>
     };
 
-    Ok((TypedHeader(ContentType::xml()), xml))
+    Ok((TypedHeader(ContentType::xml()), xml.to_string()))
 }
 
 /// Fetches the library catalog, either reading from the cache, or reading from disk if the cache

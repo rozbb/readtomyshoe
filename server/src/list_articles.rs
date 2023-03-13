@@ -108,12 +108,12 @@ pub(crate) async fn get_rss(
               <title>{item.title}</title>
               <pubDate>{datetime_added}</pubDate>
               |f| f.write_str(&duration_text)?;
-              <enclosure url={mp3_url} length="0" type="audio/mpeg"/>
+              <enclosure url={mp3_url} length="0" type="audio/mpeg" />
               <itunes:explicit>"no"</itunes:explicit>
-              <link/>
+              <link />
               <itunes:episodeType>"full"</itunes:episodeType>
-              <itunes:summary>|f| f.write_str(&source_text)?;</itunes:summary>
-              <description>|f| f.write_str(&source_text)?;</description>
+              <itunes:summary>{source_text}</itunes:summary>
+              <description>{source_text}</description>
             </item>
         )
     }
@@ -124,8 +124,8 @@ pub(crate) async fn get_rss(
           <title>"ReadToMyShoe"</title>
           <language>"en"</language>
           <copyright>"Owners"</copyright>
-          <itunes:author>"RTMS"</itunes:author>
-          <itunes:subtitle/>
+          <itunes:author>"ReadToMyShoe"</itunes:author>
+          <itunes:subtitle />
           <itunes:summary>"ReadToMyShoe's Feed"</itunes:summary>
           <description>"ReadToMyShoe's Feed"</description>
           <itunes:explicit>"yes"</itunes:explicit>
@@ -135,13 +135,13 @@ pub(crate) async fn get_rss(
               <itunes:name>"ReadToMyShoe"</itunes:name>
             </itunes:owner>
             <itunes:type>"episodic"</itunes:type>
-            <itunes:image href="http://localhost:9382/rtms-color-512x512.png"/>
+            <itunes:image href="http://localhost:9382/rtms-color-512x512.png" />
             <image>
               <url>"rtms-color-512x512.png"</url>
               <link>"nourl"</link>
               <title>"ReadToMyShoe"</title>
             </image>
-            <itunes:category text="News &amp; Politics"/>
+            <itunes:category text="News &amp; Politics" />
         )
     }
 

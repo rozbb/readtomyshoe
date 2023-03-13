@@ -113,14 +113,13 @@ pub(crate) async fn get_rss(
         )?; // Need to break this up because it reaches the recursion limit :(
         format_xml::write!(f,
             <itunes:owner>
-              <itunes:name>"Big Grande"</itunes:name>
-              <itunes:email>"me@example.com"</itunes:email>
+              <itunes:name>"ReadToMyShoe"</itunes:name>
             </itunes:owner>
             <itunes:type>"episodic"</itunes:type>
             <itunes:image href="http://localhost:9382/rtms-color-512x512.png"/>
             <image>
               <url>"rtms-color-512x512.png"</url>
-              <link>"https://shows.acast.com/last-resort"</link>
+              <link>"nourl"</link>
               <title>"ReadToMyShoe"</title>
             </image>
             <itunes:category text="News &amp; Politics"/>

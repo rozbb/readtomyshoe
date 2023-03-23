@@ -88,15 +88,17 @@ fn hash_article(ArticleTextSubmission { title, body }: &ArticleTextSubmission) -
     let digest = h.finalize();
     zbase32::encode(&digest, ARTICLE_HASH_BITLEN)
 }
-/// Derives the unique ID of this article. It's of the form SHORTTITLE-HASH.mp3, where SHORTTITLE
-/// is the sanitized, truncated title of the article
+
+/// Derives the unique ID of this article. It's of the form SHORTTITLE-HASH, where SHORTTITLE is
+/// the sanitized, truncated title of the article, and HASH is the zbase32 encoding of the
+/// Blake2s256 hash of the article.
 pub fn derive_article_id(article: &ArticleTextSubmission) -> String {
     let sanitized_title =
         sanitize_filename::sanitize_with_options(&article.title, SANITIZATION_OPTIONS);
     let truncated_title =
         truncate_to_bytes(&sanitized_title, FILENAME_TITLE_MAXLEN, StrEncoding::Utf8);
     let hash = hash_article(&article);
-    format!("{truncated_title}-{hash}.mp3")
+    format!("{truncated_title}-{hash}")
 }
 
 /// Saves article metadata as ID3 tags in the MP3 file:

@@ -1,7 +1,8 @@
 use crate::{
+    error::RtmsError,
     lang::pick_tts_voice,
     tts::{get_api_key, tts, TtsRequest, VoiceQuality, VoiceType},
-    util::{derive_article_id, save_metadata, truncate_to_bytes, StrEncoding},
+    util::{derive_article_id, get_mp3_duration, save_metadata, truncate_to_bytes, StrEncoding},
 };
 use common::{
     ArticleMetadata, ArticleTextSubmission, ArticleUrlSubmission, MAX_TITLE_UTF16_CODEUNITS,
@@ -43,24 +44,6 @@ struct ExtractedArticle {
     text: String,
 }
 
-#[derive(Debug)]
-struct AddArticleError(anyhow::Error);
-
-impl From<anyhow::Error> for AddArticleError {
-    fn from(error: anyhow::Error) -> Self {
-        Self(error)
-    }
-}
-
-impl axum::response::IntoResponse for AddArticleError {
-    fn into_response(self) -> axum::response::Response {
-        // Log the error and return it
-        let err_str = self.0.to_string();
-        tracing::error!("{}", err_str);
-        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err_str).into_response()
-    }
-}
-
 // Sets the /api/add-article route
 pub(crate) fn setup(router: Router, max_chars_per_min: NonZeroU32, audio_blob_dir: &str) -> Router {
     // Set up the rate limiter for our TTS queries
@@ -86,7 +69,7 @@ async fn add_article_by_text_endpoint(
     Json(article): Json<ArticleTextSubmission>,
     Extension(tts_rate_limiter): Extension<RateLimiter>,
     Extension(audio_blob_dir): Extension<String>,
-) -> Result<String, AddArticleError> {
+) -> Result<String, RtmsError> {
     // Just call down to add_article_by_text
     tracing::debug!("Adding article by text: '{}'", article.title);
     let meta = match add_article_by_text(&article, tts_rate_limiter, &audio_blob_dir).await {
@@ -109,7 +92,7 @@ async fn add_article_by_url_endpoint(
     Json(ArticleUrlSubmission { url }): Json<ArticleUrlSubmission>,
     Extension(tts_rate_limiter): Extension<RateLimiter>,
     Extension(audio_blob_dir): Extension<String>,
-) -> Result<String, AddArticleError> {
+) -> Result<String, RtmsError> {
     tracing::debug!("Adding article by URL: {url}");
     let meta = match add_article_by_url(&url, tts_rate_limiter, &audio_blob_dir).await {
         Ok(m) => m,
@@ -131,7 +114,7 @@ async fn add_article_by_text(
     article: &ArticleTextSubmission,
     tts_rate_limiter: RateLimiter,
     audio_blob_dir: &str,
-) -> Result<ArticleMetadata, AddArticleError> {
+) -> Result<ArticleMetadata, RtmsError> {
     tracing::debug!("Processing article with title '{}'", article.title);
 
     // Serialize the article and get its bytelen
@@ -152,8 +135,8 @@ async fn add_article_by_text(
 
     let id = derive_article_id(&article);
 
-    // Fail if the article already exists
-    let savepath = Path::new(&audio_blob_dir).join(&id).with_extension("mp3");
+    // Fail if the article already exists. The filename is ID.mp333
+    let savepath = Path::new(&audio_blob_dir).join(&format!("{id}.mp3"));
     if savepath.exists() {
         Err(anyhow!("File '{:?}' already exists", savepath))?;
     }
@@ -175,7 +158,7 @@ async fn add_article_by_text(
         // Remove the file
         if let Err(f) = fs::remove_file(&tmp_savepath) {
             let context = format!("could not delete {id}: {f}");
-            e.0.context(context).into()
+            e.context(context).into()
         } else {
             e
         }
@@ -184,6 +167,9 @@ async fn add_article_by_text(
     // TTS was successful, change the filename
     std::fs::rename(&tmp_savepath, &savepath)
         .map_err(|e| anyhow!("could not rename {:?} to {:?}: {e}", tmp_savepath, savepath))?;
+
+    // Measure its duration. This goes in metadata
+    let article_duration = get_mp3_duration(&savepath).ok();
 
     // Get the current time. This is the official time the article was added to the library
     let unix_epoch_now = SystemTime::now()
@@ -205,6 +191,7 @@ async fn add_article_by_text(
     Ok(ArticleMetadata {
         id,
         title: truncated_title,
+        duration: article_duration,
         datetime_added: Some(unix_epoch_now),
         source_url: None,
     })
@@ -216,7 +203,7 @@ async fn add_article_by_url(
     url: &str,
     tts_rate_limiter: RateLimiter,
     audio_blob_dir: &str,
-) -> Result<ArticleMetadata, AddArticleError> {
+) -> Result<ArticleMetadata, RtmsError> {
     // TODO: Check earlier that trafilatura is present
 
     // Run trafilatura on the given URL
@@ -250,7 +237,7 @@ async fn add_article_by_url(
 }
 
 /// Converts an article to speech and saves to the given file
-async fn tts_to_file(file: &mut File, text: String) -> Result<(), AddArticleError> {
+async fn tts_to_file(file: &mut File, text: String) -> Result<(), RtmsError> {
     let api_key = get_api_key().map_err(|e| anyhow!("Failed to get Google API key: {:?}", e))?;
 
     // Use the language detector to pick the TTS voice

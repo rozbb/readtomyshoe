@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 /// The maximum allowed length of a title, in UTF-16 code units
@@ -10,6 +12,8 @@ pub struct ArticleMetadata {
     pub id: String,
     /// The title of the article
     pub title: String,
+    /// The length of this article at 1x speed
+    pub duration: Option<Duration>,
     /// The datetime the article was added to the library
     pub datetime_added: Option<u64>,
     /// The URL this article was sourced from, if any

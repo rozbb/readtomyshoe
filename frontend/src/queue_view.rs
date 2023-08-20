@@ -42,7 +42,6 @@ pub(crate) enum QueueMsg {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct CachedArticle {
     pub title: String,
-    // TODO: Make id unique. Currently it's just a copy of the title
     pub id: ArticleId,
     pub audio_blob: Vec<u8>,
 }

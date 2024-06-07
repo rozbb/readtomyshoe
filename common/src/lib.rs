@@ -45,3 +45,10 @@ impl ArticleTextSubmission {
 pub struct ArticleUrlSubmission {
     pub url: String,
 }
+
+/// The request type for when the client sends the raw HTML of the page along with the URL it came from
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ArticleBookmarkletSubmission {
+    pub url: String,
+    pub page_html: String,
+}

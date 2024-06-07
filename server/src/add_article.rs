@@ -5,21 +5,24 @@ use crate::{
     util::{derive_article_id, get_mp3_duration, save_metadata, truncate_to_bytes, StrEncoding},
 };
 use common::{
-    ArticleMetadata, ArticleTextSubmission, ArticleUrlSubmission, MAX_TITLE_UTF16_CODEUNITS,
+    ArticleBookmarkletSubmission, ArticleMetadata, ArticleTextSubmission, ArticleUrlSubmission,
+    MAX_TITLE_UTF16_CODEUNITS,
 };
+use futures::AsyncWriteExt;
 
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
     num::{NonZeroU32, NonZeroUsize},
     path::Path,
+    process::Stdio,
     sync::Arc,
     time::SystemTime,
 };
 
 use anyhow::{anyhow, Context};
 use async_process::Command;
-use axum::{extract::Extension, routing::post, Json, Router};
+use axum::{extract::Extension, routing::post, Form, Json, Router};
 use governor::{
     clock::DefaultClock, middleware::NoOpMiddleware, state::direct::NotKeyed, state::InMemoryState,
     Quota, RateLimiter as BaseRateLimiter,
@@ -59,6 +62,10 @@ pub(crate) fn setup(router: Router, max_chars_per_min: NonZeroU32, audio_blob_di
         Router::new()
             .route("/add-article-by-text", post(add_article_by_text_endpoint))
             .route("/add-article-by-url", post(add_article_by_url_endpoint))
+            .route(
+                "/add-article-by-bookmarklet",
+                post(add_article_by_bookmarklet_endpoint),
+            )
             .layer(Extension(tts_rate_limiter))
             .layer(Extension(audio_blob_dir.to_string())),
     )
@@ -107,6 +114,30 @@ async fn add_article_by_url_endpoint(
         .map_err(|e| tracing::error!("Error saving metadata: {e}"));
 
     Ok(meta.id)
+}
+
+/// Converts the given article contents to speech, assigns it the given URL metadata, and returns the new filename
+async fn add_article_by_bookmarklet_endpoint(
+    Form(ArticleBookmarkletSubmission { url, page_html }): Form<ArticleBookmarkletSubmission>,
+    Extension(tts_rate_limiter): Extension<RateLimiter>,
+    Extension(audio_blob_dir): Extension<String>,
+) -> Result<String, RtmsError> {
+    tracing::debug!("Adding article by bookmarklet input: url={url}");
+    let meta = match add_article_by_bookmarklet(&url, &page_html, tts_rate_limiter, &audio_blob_dir)
+        .await
+    {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::error!("Error adding by bookmarklet: {:?}", e);
+            return Err(e);
+        }
+    };
+
+    // Save the metadata in the ID3 tags
+    let _ = save_metadata(&meta, &audio_blob_dir)
+        .map_err(|e| tracing::error!("Error saving metadata: {e}"));
+
+    Ok(format!("Successfully added article '{}'", meta.title))
 }
 
 /// The real logic. Converts the given article contents to speech, and returns the new filename
@@ -222,7 +253,56 @@ async fn add_article_by_url(
 
     // Convert the CLI output from JSON and turn it into a `ArticleTextSubmission`
     let parsed_res: ExtractedArticle =
-        serde_json::from_slice(&output.stdout).map_err(|_| anyhow!("Text extraction failed"))?;
+        serde_json::from_slice(&output.stdout).map_err(|e| anyhow!("Text extraction failed"))?;
+    let text_submission = ArticleTextSubmission {
+        title: parsed_res.title,
+        body: parsed_res.text,
+    };
+
+    // Now that we have the article body, call down to add_article_by_text
+    let mut meta = add_article_by_text(&text_submission, tts_rate_limiter, audio_blob_dir).await?;
+    // Add the URL to the metadata
+    meta.source_url = Some(url.to_string());
+
+    Ok(meta)
+}
+
+/// Nearly identical to the fetch_by_url. Passes raw html to trafilatura instead of the URL
+async fn add_article_by_bookmarklet(
+    url: &str,
+    page_html: &str,
+    tts_rate_limiter: RateLimiter,
+    audio_blob_dir: &str,
+) -> Result<ArticleMetadata, RtmsError> {
+    // Run trafilatura on the given HTML
+    let mut child = Command::new("../python_deps/bin/trafilatura")
+        .env("PYTHONPATH", "../python_deps")
+        .arg("--json")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow!("error starting trafulatura: {:?}", e))?;
+    // Write the HTML to the child process via stdin
+    let stdin = child
+        .stdin
+        .as_mut()
+        .ok_or(anyhow!("could not get stdin from child process"))?;
+    stdin
+        .write_all(page_html.as_bytes())
+        .await
+        .map_err(|e| anyhow!("error feeding article to child process: {:?}", e))?;
+
+    // See if the command failed
+    let output = child.output().await.unwrap();
+    if !output.status.success() {
+        Err(anyhow!("Text extraction failed"))?;
+    }
+
+    tracing::warn!("output length: {}", output.stdout.len());
+
+    // Convert the CLI output from JSON and turn it into a `ArticleTextSubmission`
+    let parsed_res: ExtractedArticle = serde_json::from_slice(&output.stdout)
+        .map_err(|e| anyhow!("Trafilatura output parsing failed: {:?}", e))?;
     let text_submission = ArticleTextSubmission {
         title: parsed_res.title,
         body: parsed_res.text,

@@ -139,7 +139,7 @@ pub fn save_metadata(meta: &ArticleMetadata, audio_blob_dir: &str) -> Result<(),
     }
 
     // Now write
-    tag.write_to_path(dbg!(savepath), Version::Id3v24)
+    tag.write_to_path(savepath, Version::Id3v24)
         .map_err(Into::into)
 }
 

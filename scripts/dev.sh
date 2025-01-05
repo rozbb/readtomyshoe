@@ -2,6 +2,8 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+export RUST_LOG=readtomyshoe_server
+
 (trap 'kill 0' SIGINT; \
  bash -c ' \
     cd frontend; \

@@ -34,6 +34,7 @@ symphonia-bundle-mp3 = "0.5"
 symphonia-core = "0.5"
 format_xml = "0.3.0"
 urlencoding = "2.1.2"
+tokio-retry = "0.3.0"
 
 [dependencies.common]
 path = "../common"

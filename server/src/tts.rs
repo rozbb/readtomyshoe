@@ -3,8 +3,12 @@
 use anyhow::{anyhow, bail, Context, Error as AnyError};
 use bytes::Bytes;
 use serde::Deserialize;
+use tokio_retry::{
+    strategy::{jitter, ExponentialBackoff},
+    Retry,
+};
 
-use core::iter;
+use core::{future::Future, iter};
 
 /// Path to the file that holds the Google Cloud API key
 const API_KEY_FILE: &str = "gcp_api.key";
@@ -93,6 +97,18 @@ fn redact_error(mut e: reqwest::Error) -> reqwest::Error {
     e
 }
 
+/// Performs the given async operation up to `num_retries` times before giving up
+pub(crate) async fn do_with_retry<F, Fut, T, E>(num_retries: usize, f: F) -> Result<T, E>
+where
+    F: Fn() -> Fut,
+    Fut: Future<Output = Result<T, E>>,
+{
+    let retry_strategy = ExponentialBackoff::from_millis(10)
+        .map(jitter) // add jitter to delays
+        .take(num_retries);
+    Retry::spawn(retry_strategy, f).await
+}
+
 /// Speaks text string of length at most MAX_CHARS_PER_REQUEST. Returns an error if length exceeds,
 /// or an error occurs in the Google Cloud API call.
 pub(crate) async fn tts_single(api_key: &str, req: &TtsRequest) -> Result<Bytes, AnyError> {
@@ -104,18 +120,30 @@ pub(crate) async fn tts_single(api_key: &str, req: &TtsRequest) -> Result<Bytes,
         bail!("TTS request is too long");
     }
 
-    // Do the HTTP request
+    // Do the HTTP request. Try it at most 5 times before failing
     let client = reqwest::Client::new();
     let url = reqwest::Url::parse_with_params(GCP_TTS_API, &[("key", api_key)])?;
-    let res = client
-        .post(url)
-        .json(&payload)
-        .send()
-        .await
-        .with_context(|| "Couldn't make TTS request")?
-        .error_for_status()
-        .map_err(redact_error)
-        .with_context(|| "TTS request failed")?;
+    let res = do_with_retry(5, || async {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let payload_id = {
+            let mut h = DefaultHasher::new();
+            format!("{}", payload).hash(&mut h);
+            h.finish()
+        };
+        tracing::warn!("Running TTS chunk with payload {}", payload_id);
+        let res = client
+            .post(url.clone())
+            .json(&payload)
+            .send()
+            .await
+            .with_context(|| "Couldn't make TTS request")?
+            .error_for_status()
+            .map_err(redact_error)
+            .with_context(|| "TTS request failed")?;
+        Result::<_, AnyError>::Ok(res)
+    })
+    .await?;
 
     // The resulting JSON response has our MP3 data
     let res_bytes = res.bytes().await?;

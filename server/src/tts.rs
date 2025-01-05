@@ -131,7 +131,7 @@ pub(crate) async fn tts_single(api_key: &str, req: &TtsRequest) -> Result<Bytes,
             format!("{}", payload).hash(&mut h);
             h.finish()
         };
-        tracing::warn!("Running TTS chunk with payload {}", payload_id);
+        tracing::debug!("Running TTS chunk with payload {}", payload_id);
         let res = client
             .post(url.clone())
             .json(&payload)

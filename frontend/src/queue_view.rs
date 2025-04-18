@@ -185,7 +185,7 @@ impl Component for Queue {
                 .await
                 .into_iter()
                 .map(QueueMsg::SetQueue)
-                .collect()
+                .collect::<Vec<_>>()
         });
 
         Self::default()

@@ -105,10 +105,9 @@ pub(crate) fn response_with_read_callback<F: 'static + FnMut(Uint8Array)>(
         ReadableStream::new_with_underlying_source(&readable_stream_callbacks).unwrap();
 
     // Finally make a Response out of the above ReadableStream
-    let resp = {
-        let raw = web_sys::Response::new_with_opt_readable_stream(Some(&readable_stream)).unwrap();
-        gloo_net::http::Response::from_raw(raw)
-    };
+    let resp = web_sys::Response::new_with_opt_readable_stream(Some(&readable_stream))
+        .unwrap()
+        .into();
 
     Ok(resp)
 }

@@ -49,5 +49,5 @@ fn main() {
 
     caching::register_service_worker();
 
-    yew::start_app::<App>();
+    yew::Renderer::<App>::new().render();
 }

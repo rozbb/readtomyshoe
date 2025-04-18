@@ -121,7 +121,7 @@ fn render_lib_item(
     let status_elem_id = libitem_status_elem_id(&id);
 
     // Define the Add to Queue callback
-    let add_to_queue = library_link.callback_once(move |_| {
+    let add_to_queue = library_link.callback(move |_| {
         // Tell the library to fetch the article. This will change the button to a progress
         // indicator
         LibraryMsg::FetchArticle {

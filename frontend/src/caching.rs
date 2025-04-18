@@ -6,7 +6,7 @@ use crate::{
 use std::{cell::RefCell, sync::Arc};
 
 use anyhow::{anyhow, bail, Error as AnyError};
-use gloo_utils::window;
+use gloo_utils::{format::JsValueSerdeExt, window};
 use ringbuffer::AllocRingBuffer;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};

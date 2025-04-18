@@ -41,7 +41,7 @@ impl Component for App {
         let queue_link_copy = self.queue_link.clone();
         let library_link_copy = self.library_link.clone();
 
-        let switch = move |routes: &Route| {
+        let switch = move |routes: Route| {
             let player_link = player_link_copy.clone();
             let queue_link = queue_link_copy.clone();
             let library_link = library_link_copy.clone();
@@ -59,7 +59,7 @@ impl Component for App {
 
         html! {
         <BrowserRouter>
-            <Switch<Route> render={Switch::render(switch)} />
+            <Switch<Route> render={switch} />
         </BrowserRouter>
         }
     }
